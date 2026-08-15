@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 from collections import defaultdict
 
@@ -141,6 +142,50 @@ for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_o
             check=True, capture_output=True,
         ).stdout
         self.assertEqual(first, second)
+
+    def test_cli_writes_one_shared_evaluation_suite(self):
+        project_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            all_out = root / "all"
+            one_out = root / "one"
+            subprocess.run(
+                [
+                    sys.executable, "generate.py", "--all-regimes", "--n-train", "20",
+                    "--n-eval-each", "8", "--seed", "9", "--out", str(all_out),
+                ],
+                cwd=project_root, check=True, capture_output=True,
+            )
+            subprocess.run(
+                [
+                    sys.executable, "generate.py", "--regime", "attack_heavy", "--n-train", "20",
+                    "--n-eval-each", "8", "--seed", "9", "--out", str(one_out),
+                ],
+                cwd=project_root, check=True, capture_output=True,
+            )
+            self.assertEqual(
+                {path.name for path in all_out.iterdir()},
+                {
+                    "train_attack_heavy.jsonl", "train_diverse_attack.jsonl",
+                    "train_authorization_balanced.jsonl", "eval_iid.jsonl",
+                    "eval_lexical_ood.jsonl", "eval_mechanism_ood.jsonl",
+                    "eval_auth_recombination.jsonl", "eval_benign_control.jsonl",
+                },
+            )
+            for split in [
+                "iid", "lexical_ood", "mechanism_ood", "auth_recombination", "benign_control",
+            ]:
+                self.assertEqual(
+                    (all_out / f"eval_{split}.jsonl").read_bytes(),
+                    (one_out / f"eval_{split}.jsonl").read_bytes(),
+                )
+
+    def test_benign_control_supports_a_200_example_eval_split(self):
+        rows = AuthorizationDatasetGenerator(seed=13).generate(
+            "shared_eval", "benign_control", 200,
+        )
+        self.assertEqual(len(rows), 200)
+        self.assertEqual(len({row.id for row in rows}), 200)
 
 if __name__ == "__main__":
     unittest.main()

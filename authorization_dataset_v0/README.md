@@ -29,7 +29,8 @@ record their policy-template family and counterfactual pair ID in metadata.
 
 Requires only Python 3.9+.
 
-Generate a 1k-example training dataset for the balanced regime:
+Generate a 1k-example training dataset for the balanced regime and the shared
+evaluation suite:
 
 ```bash
 python generate.py \
@@ -39,7 +40,8 @@ python generate.py \
   --seed 0
 ```
 
-Generate 1k training examples for all three regimes:
+Generate 1k training examples for all three regimes and one shared evaluation
+suite:
 
 ```bash
 python generate.py \
@@ -52,8 +54,23 @@ python generate.py \
 Inspect:
 
 ```bash
-python inspect_dataset.py data/generated/authorization_balanced/train.jsonl
-python inspect_dataset.py data/generated/authorization_balanced/auth_recombination.jsonl
+python inspect_dataset.py data/generated/train_authorization_balanced.jsonl
+python inspect_dataset.py data/generated/eval_auth_recombination.jsonl
+```
+
+The resulting layout keeps experimental conditions separate from the shared
+measurement suite:
+
+```text
+data/generated/
+  train_attack_heavy.jsonl
+  train_diverse_attack.jsonl
+  train_authorization_balanced.jsonl
+  eval_iid.jsonl
+  eval_lexical_ood.jsonl
+  eval_mechanism_ood.jsonl
+  eval_auth_recombination.jsonl
+  eval_benign_control.jsonl
 ```
 
 Run tests:

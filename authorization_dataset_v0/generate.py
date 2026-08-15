@@ -6,6 +6,7 @@ from authdata.generator import AuthorizationDatasetGenerator, write_jsonl
 
 REGIMES = ["attack_heavy", "diverse_attack", "authorization_balanced"]
 EVAL_SPLITS = ["iid", "lexical_ood", "mechanism_ood", "auth_recombination", "benign_control"]
+SHARED_EVAL_REGIME = "shared_eval"
 
 def main():
     p = argparse.ArgumentParser()
@@ -21,16 +22,25 @@ def main():
         p.error("choose --regime or --all-regimes")
 
     regimes = REGIMES if args.all_regimes else [args.regime]
-    gen = AuthorizationDatasetGenerator(seed=args.seed)
-
     for regime in regimes:
-        write_jsonl(args.out / regime / "train.jsonl",
-                    gen.generate(regime, "train", args.n_train))
-        for split in EVAL_SPLITS:
-            write_jsonl(args.out / regime / f"{split}.jsonl",
-                        gen.generate(regime, split, args.n_eval_each))
-        print(f"generated {regime}: train={args.n_train}, "
-              f"eval={len(EVAL_SPLITS) * args.n_eval_each}")
+        # A fresh RNG makes each train set depend only on its regime and the
+        # requested seed, never on which other regimes were generated first.
+        train_gen = AuthorizationDatasetGenerator(seed=args.seed)
+        write_jsonl(
+            args.out / f"train_{regime}.jsonl",
+            train_gen.generate(regime, "train", args.n_train),
+        )
+        print(f"generated train_{regime}: {args.n_train}")
+
+    # Evaluation examples are generated once from a dedicated generator.  They
+    # therefore remain byte-identical across all training-regime comparisons.
+    eval_gen = AuthorizationDatasetGenerator(seed=args.seed)
+    for split in EVAL_SPLITS:
+        write_jsonl(
+            args.out / f"eval_{split}.jsonl",
+            eval_gen.generate(SHARED_EVAL_REGIME, split, args.n_eval_each),
+        )
+    print(f"generated shared eval suite: {len(EVAL_SPLITS) * args.n_eval_each}")
 
 if __name__ == "__main__":
     main()
