@@ -85,6 +85,9 @@ frequently written artifacts stay under:
 The source checkout and its JSONL data are copied to local storage as well, so
 training data reads and all experiment writes happen under `/local`. Previous
 local artifacts are preserved because the helper does not use `rsync --delete`.
+At the end of each run, it copies only small reports (PNGs, JSON metrics, JSONL
+predictions/logs) back to `auth-training/outputs/` in the home checkout. Model
+weights, checkpoints, optimizer state, and Hugging Face cache remain local.
 Override the local root only when needed:
 
 ```bash
@@ -121,6 +124,18 @@ less "$SMOKE/eval_smoke/predictions_iid.jsonl"
 
 Check that all five `metrics_*.json` and `predictions_*.jsonl` files exist and
 that the run reaches `final/`.
+
+Home-visible copies are under:
+
+```bash
+ls -al /insomnia001/home/bys2107/research/auth-training/outputs/smoke_authorization_balanced
+```
+
+After manually generating plots or if a run ended before report sync, run:
+
+```bash
+bash auth-training/copy_helper.sh sync
+```
 
 ## Initial experiment and results
 

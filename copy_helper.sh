@@ -9,8 +9,8 @@ DST="$WORK_ROOT/auth-training"
 PROFILE="${1:-smoke}"
 
 case "$PROFILE" in
-  smoke|baseline|initial|attack_heavy|authorization_balanced) ;;
-  *) echo "Usage: $0 {smoke|baseline|initial|attack_heavy|authorization_balanced}" >&2; exit 2 ;;
+  smoke|baseline|initial|attack_heavy|authorization_balanced|sync) ;;
+  *) echo "Usage: $0 {smoke|baseline|initial|attack_heavy|authorization_balanced|sync}" >&2; exit 2 ;;
 esac
 
 ARTIFACT_ROOT="$DST/artifacts"
@@ -20,6 +20,28 @@ WANDB_DIR="$ARTIFACT_ROOT/wandb"
 TORCH_HOME="$ARTIFACT_ROOT/torch"
 XDG_CACHE_HOME="$ARTIFACT_ROOT/cache"
 TMP_DIR="$ARTIFACT_ROOT/tmp"
+REPORT_ROOT="$SRC/outputs"
+
+sync_reports() {
+  mkdir -p "$REPORT_ROOT"
+  if [[ -d "$OUT_ROOT" ]]; then
+    # Regenerate lightweight plots when the source checkout has plotting code.
+    while IFS= read -r -d '' run_dir; do
+      PYTHONPATH="$SRC" python "$SRC/plot_results.py" --run-dir "$run_dir" || true
+    done < <(find "$OUT_ROOT" -mindepth 1 -maxdepth 1 -type d -print0)
+    # Copy only human-readable reports; never copy checkpoints, model weights,
+    # optimizer state, or Hugging Face cache back to the home filesystem.
+    rsync -a --prune-empty-dirs \
+      --include '*/' --include '*.png' --include '*.json' --include '*.jsonl' \
+      --exclude '*' "$OUT_ROOT/" "$REPORT_ROOT/"
+  fi
+  echo "Home-visible reports: $REPORT_ROOT"
+}
+
+if [[ "$PROFILE" == "sync" ]]; then
+  sync_reports
+  exit 0
+fi
 
 mkdir -p "$DST" "$ARTIFACT_ROOT" "$HF_CACHE_DIR" "$OUT_ROOT" \
   "$WANDB_DIR" "$TORCH_HOME" "$XDG_CACHE_HOME" "$TMP_DIR"
@@ -35,6 +57,7 @@ echo "Copying source and datasets to local storage..."
 rsync -a \
   --exclude '.git/' --exclude 'artifacts/' --exclude 'runs/' \
   --exclude 'checkpoints/' --exclude 'wandb/' --exclude '__pycache__/' \
+  --exclude 'outputs/' \
   --exclude '*.pyc' --exclude '.pytest_cache/' --exclude '.venv/' \
   --exclude 'venv/' "$SRC/" "$DST/"
 
@@ -63,6 +86,8 @@ case "$PROFILE" in
     ;;
   attack_heavy|authorization_balanced) bash scripts/train_full.sh "$PROFILE" ;;
 esac
+
+sync_reports
 
 echo "Completed profile: $PROFILE"
 echo "Artifacts: $ARTIFACT_ROOT"
