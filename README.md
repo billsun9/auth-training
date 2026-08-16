@@ -41,6 +41,8 @@ From the repository checkout:
 ```bash
 conda activate nlp                 # or the cluster environment you use
 python -c 'import torch; print(torch.__version__, torch.cuda.is_available())'
+python -m pip install torch==2.10.0 \
+  --index-url https://download.pytorch.org/whl/cu128
 python -m pip install -r requirements.txt
 python validate_data.py
 ```
@@ -49,9 +51,10 @@ The installed PyTorch CUDA build must be compatible with the cluster driver.
 For the RTX A6000 nodes described here (driver CUDA 12.9), use a CUDA 12.x
 PyTorch build. If `torch.cuda.is_available()` is `False` or emits a driver
 version warning, fix the environment before running training; otherwise the
-job can fall back to CPU or fail during initialization. Transformers 4.x and
-5.x are supported by the training script, but use the repository requirements
-file rather than an unrelated system environment.
+job can fall back to CPU or fail during initialization. The repository pins
+Transformers 4.57.6 and Torch 2.10.0 for reproducibility. The Torch requirement
+pins the version, while the command above selects the CUDA 12.8 build
+appropriate for this node's CUDA 12.9-capable driver.
 
 `copy_helper.sh` performs this CUDA check before launching any profile and
 stops with a clear error if CUDA is unavailable. Do not continue past a
