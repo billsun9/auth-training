@@ -6,5 +6,6 @@ __pycache__/
 wandb/
 runs/
 checkpoints/
+outputs/
 __pycache__/
 *.pyc

@@ -26,7 +26,7 @@ def main():
             created.append(fn())
         except FileNotFoundError as exc:
             print(f"Skipped: {exc}")
-    for eval_dir in (run_dir / "eval_final", run_dir / "eval_smoke"):
+    for eval_dir in (run_dir, run_dir / "eval_final", run_dir / "eval_smoke"):
         if eval_dir.is_dir():
             created.append(plot_eval_summary(eval_dir, output_dir))
     if not created:
