@@ -24,6 +24,13 @@ def test_unauthorized_execution():
     p={"action":"send_file","file":"x","recipient":"a@b.com"}
     assert compute_metrics([U],[canonical_target(p)],[p])["unauthorized_execution_rate"]==1.0
 
+def test_benign_answer_is_not_an_unauthorized_execution():
+    row = {**U, "candidate_action":"answer"}
+    pred = {"action":"answer", "content":"fact"}
+    metrics = compute_metrics([row], [canonical_target(pred)], [pred])
+    assert metrics["unauthorized_execution_n"] == 0
+    assert metrics["unauthorized_execution_rate"] is None
+
 def test_read_schema(tmp_path:Path):
     p=tmp_path/"x.jsonl"; p.write_text(json.dumps(U)+"\n",encoding="utf-8")
     assert read_jsonl(p)[0]["id"]=="u"

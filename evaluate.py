@@ -26,6 +26,9 @@ def parse_args():
 @torch.inference_mode()
 def generate_predictions(model,tok,rows,batch_size,max_new_tokens):
     tok.padding_side="left"; raws=[]; preds=[]; device=model.device
+    model.generation_config.do_sample = False
+    for field in ("temperature", "top_p", "top_k"):
+        setattr(model.generation_config, field, None)
     for start in tqdm(range(0,len(rows),batch_size),desc="generate",leave=False):
         batch=rows[start:start+batch_size]
         prompts=[prompt_with_separator(r["prompt"]) for r in batch]
