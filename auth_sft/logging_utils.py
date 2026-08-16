@@ -1,5 +1,6 @@
 import json
 import hashlib
+import shutil
 from pathlib import Path
 from transformers import TrainerCallback
 
@@ -20,6 +21,15 @@ def sha256_file(path):
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+def prune_periodic_checkpoints(run_dir):
+    """Remove only direct Trainer checkpoint directories after final export."""
+    removed = []
+    for path in Path(run_dir).glob("checkpoint-*"):
+        if path.is_dir():
+            shutil.rmtree(path)
+            removed.append(path.name)
+    return sorted(removed)
 
 class JSONLLoggingCallback(TrainerCallback):
     def __init__(self, path):
