@@ -16,7 +16,11 @@ OUT="$OUT_ROOT/${REGIME}__${MODEL_SLUG}__${METHOD}__seed${SEED}"
 EXTRA=(--wandb-dir "$WANDB_DIR")
 [[ "${WANDB:-0}" == "1" ]] && EXTRA+=(--wandb)
 python validate_data.py --data-dir "$DATA_DIR"
-torchrun --standalone --nproc_per_node="$NPROC_PER_NODE" train_sft.py \
+TRAIN_CMD=(python train_sft.py)
+if [[ "$NPROC_PER_NODE" -gt 1 ]]; then
+  TRAIN_CMD=(torchrun --standalone --nproc_per_node="$NPROC_PER_NODE" train_sft.py)
+fi
+"${TRAIN_CMD[@]}" \
   --data-dir "$DATA_DIR" --regime "$REGIME" --model "$MODEL" --method "$METHOD" \
   --output-dir "$OUT" --hf-cache-dir "$HF_CACHE_DIR" --num-train-epochs "$EPOCHS" \
   --per-device-train-batch-size 2 --gradient-accumulation-steps 4 \

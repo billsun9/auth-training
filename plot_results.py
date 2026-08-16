@@ -27,7 +27,7 @@ def main():
         except FileNotFoundError as exc:
             print(f"Skipped: {exc}")
     for eval_dir in (run_dir, run_dir / "eval_final", run_dir / "eval_smoke"):
-        if eval_dir.is_dir():
+        if eval_dir.is_dir() and any(eval_dir.glob("metrics_*.json")):
             created.append(plot_eval_summary(eval_dir, output_dir))
     if not created:
         raise SystemExit("No plot-ready artifacts found")
