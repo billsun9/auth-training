@@ -11,6 +11,7 @@ python validate_data.py --data-dir "$DATA_DIR"
 python train_sft.py \
   --data-dir "$DATA_DIR" --regime authorization_balanced --model "$MODEL" \
   --method lora --output-dir "$OUT" --hf-cache-dir "$HF_CACHE_DIR" --wandb-dir "$WANDB_DIR" --max-train-samples 16 --max-steps 2 \
+  --validation-ratio 0 --early-stopping-patience 0 \
   --per-device-train-batch-size 2 --gradient-accumulation-steps 1 \
   --max-seq-length 1024 --logging-steps 1 --save-steps 0 --seed 0
 python evaluate.py \

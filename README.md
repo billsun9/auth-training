@@ -152,6 +152,12 @@ per-device batch size 2, gradient accumulation 4, nominal global batch size
 on the same five shared files. Set `NPROC_PER_NODE=2` when a two-GPU
 allocation is available; compared regimes must use the same setting.
 
+Each full-SFT regime holds out a deterministic 10% validation split from its
+own training rows (counterfactual pairs stay together). Validation uses the
+same completion-only loss, runs every 20 steps, restores the best
+`eval_loss` checkpoint, and stops after five validation evaluations without
+improvement. The shared five-split suite remains untouched for final reporting.
+
 Results are under:
 
 ```text
@@ -198,7 +204,7 @@ python plot_results.py --run-dir "$RUN"
 
 It writes PNGs to `$RUN/plots/`:
 
-- `training_progress.png`: logged loss, learning rate, and gradient norm over optimizer steps;
+- `training_progress.png`: training loss, held-out validation loss (for full-SFT), learning rate, and gradient norm over optimizer steps;
 - `checkpoint_eval_progress.png`: exact-target accuracy, action accuracy, and unauthorized-execution rate across checkpoint evaluations and final;
 - `eval_summary.png`: final metrics across the five eval splits.
 

@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from auth_sft.data import canonical_target, prompt_with_separator, read_jsonl
+from auth_sft.data import canonical_target, prompt_with_separator, read_jsonl, split_train_validation_rows
 from auth_sft.metrics import compute_metrics, extract_json_object
 
 U={"id":"u","split":"auth_recombination","regime":"shared_eval","source":"email",
@@ -34,6 +34,22 @@ def test_benign_answer_is_not_an_unauthorized_execution():
 def test_read_schema(tmp_path:Path):
     p=tmp_path/"x.jsonl"; p.write_text(json.dumps(U)+"\n",encoding="utf-8")
     assert read_jsonl(p)[0]["id"]=="u"
+
+
+def test_validation_split_is_deterministic_and_keeps_pairs_together():
+    rows = [
+        {**U, "id": "u1", "metadata": {"counterfactual_pair_id": "pair-1"}},
+        {**A, "id": "a1", "metadata": {"counterfactual_pair_id": "pair-1"}},
+        {**U, "id": "u2", "metadata": {"counterfactual_pair_id": "pair-2"}},
+        {**A, "id": "a2", "metadata": {"counterfactual_pair_id": "pair-2"}},
+    ]
+    train, validation = split_train_validation_rows(rows, validation_ratio=0.25, seed=7)
+    again_train, again_validation = split_train_validation_rows(rows, validation_ratio=0.25, seed=7)
+    assert {row["id"] for row in train} == {row["id"] for row in again_train}
+    assert {row["id"] for row in validation} == {row["id"] for row in again_validation}
+    train_pairs = {row["metadata"]["counterfactual_pair_id"] for row in train}
+    validation_pairs = {row["metadata"]["counterfactual_pair_id"] for row in validation}
+    assert not train_pairs & validation_pairs
 
 
 def test_completion_only_mask():

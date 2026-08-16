@@ -37,11 +37,16 @@ def plot_training_progress(run_dir: str | Path, output_dir: str | Path | None = 
 
     plt = _plt()
     fig, axes = plt.subplots(2, 1, figsize=(9, 7), sharex=True)
-    for field, label in (("loss", "loss"), ("learning_rate", "learning rate"), ("grad_norm", "gradient norm")):
+    for field, label in (("loss", "training loss"), ("eval_loss", "validation loss")):
         values = [r.get(field) for r in rows]
         pairs = [(s, v) for s, v in zip(steps, values) if isinstance(v, (int, float))]
         if pairs:
-            axes[0 if field == "loss" else 1].plot([p[0] for p in pairs], [p[1] for p in pairs], marker="o", label=label)
+            axes[0].plot([p[0] for p in pairs], [p[1] for p in pairs], marker="o", label=label)
+    for field, label in (("learning_rate", "learning rate"), ("grad_norm", "gradient norm")):
+        values = [r.get(field) for r in rows]
+        pairs = [(s, v) for s, v in zip(steps, values) if isinstance(v, (int, float))]
+        if pairs:
+            axes[1].plot([p[0] for p in pairs], [p[1] for p in pairs], marker="o", label=label)
     axes[0].set_ylabel("loss")
     axes[0].legend(loc="best")
     axes[1].set_ylabel("optimizer diagnostics")

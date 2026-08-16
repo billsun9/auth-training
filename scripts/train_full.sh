@@ -24,7 +24,8 @@ fi
   --data-dir "$DATA_DIR" --regime "$REGIME" --model "$MODEL" --method "$METHOD" \
   --output-dir "$OUT" --hf-cache-dir "$HF_CACHE_DIR" --num-train-epochs "$EPOCHS" \
   --per-device-train-batch-size 2 --gradient-accumulation-steps 4 \
-  --max-seq-length 1024 --logging-steps 5 --save-steps 20 --save-total-limit 10 \
+  --max-seq-length 1024 --validation-ratio 0.1 --eval-steps 20 --early-stopping-patience 5 \
+  --logging-steps 5 --save-steps 20 --save-total-limit 3 \
   --seed "$SEED" "${EXTRA[@]}"
 python evaluate.py \
   --data-dir "$DATA_DIR" --model "$OUT/final" --output-dir "$OUT/eval_final" --hf-cache-dir "$HF_CACHE_DIR" \
