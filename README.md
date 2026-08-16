@@ -131,10 +131,11 @@ runs on `attack_heavy` and `authorization_balanced`:
 bash auth-training/copy_helper.sh initial
 ```
 
-This uses Qwen2.5-0.5B-Instruct, full-parameter SFT, BF16, two GPUs by default,
+This uses Qwen2.5-0.5B-Instruct, full-parameter SFT, BF16, one GPU by default,
 per-device batch size 2, gradient accumulation 4, nominal global batch size
-16, two epochs, learning rate `2e-5`, gradient checkpointing, and greedy eval
-on the same five shared files. Set `NPROC_PER_NODE=1` for a one-GPU allocation.
+8, two epochs, learning rate `2e-5`, gradient checkpointing, and greedy eval
+on the same five shared files. Set `NPROC_PER_NODE=2` when a two-GPU
+allocation is available; compared regimes must use the same setting.
 
 Results are under:
 
@@ -208,6 +209,7 @@ bash scripts/run_full_matrix.sh
 
 Useful configuration variables include `ARTIFACT_ROOT`, `OUT_ROOT`,
 `HF_CACHE_DIR`, `WANDB_DIR`, `NPROC_PER_NODE`, `MODEL`, `SEED`, and `DATA_DIR`.
+The copy helper sets `DATA_DIR` to the absolute local-copy path automatically.
 The Python entry points expose equivalent `--output-dir` and
 `--hf-cache-dir` options.
 

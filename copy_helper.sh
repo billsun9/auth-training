@@ -49,6 +49,8 @@ export ARTIFACT_ROOT="$ARTIFACT_ROOT"
 export HF_CACHE_DIR="$HF_CACHE_DIR"
 export OUT_ROOT="$OUT_ROOT"
 export WANDB_DIR="$WANDB_DIR"
+export DATA_DIR="$DST/authorization_dataset_v0/data/generated"
+export NPROC_PER_NODE="${NPROC_PER_NODE:-1}"
 
 python validate_data.py --data-dir "$DST/authorization_dataset_v0/data/generated"
 
