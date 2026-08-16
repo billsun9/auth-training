@@ -96,7 +96,11 @@ def deterministic_subset(rows, max_samples, seed):
     return [rows[i] for i in sorted(idx[:max_samples])]
 
 def split_train_validation_rows(rows, validation_ratio=0.1, seed=0):
-    """Deterministically split rows, keeping counterfactual pairs together."""
+    """Deterministically split rows, keeping counterfactual groups together.
+
+    Shared capability rows are split as their own stratum so their train/validation
+    membership is identical in every regime.
+    """
     if not 0 <= validation_ratio < 1:
         raise ValueError("validation_ratio must be in [0, 1)")
     if validation_ratio == 0:
@@ -110,16 +114,26 @@ def split_train_validation_rows(rows, validation_ratio=0.1, seed=0):
         group_id = metadata.get("counterfactual_triplet_id") or metadata.get("counterfactual_pair_id")
         key = f"counterfactual:{group_id}" if group_id else f"row:{row['id']}"
         groups.setdefault(key, []).append(row)
-    keys = sorted(groups)
-    random.Random(seed).shuffle(keys)
-    target_n = max(1, round(len(rows) * validation_ratio))
-    validation_keys, validation_n = set(), 0
-    for key in keys:
-        if validation_n >= target_n:
-            break
-        validation_keys.add(key)
-        validation_n += len(groups[key])
-    if len(validation_keys) == len(keys):
+    strata = {"hierarchy": [], "shared_capability": []}
+    for key, members in groups.items():
+        stratum = "shared_capability" if members[0]["regime"] == "shared_capability" else "hierarchy"
+        strata[stratum].append(key)
+
+    validation_keys = set()
+    for stratum, keys in strata.items():
+        if not keys:
+            continue
+        keys.sort()
+        random.Random(f"{seed}:{stratum}").shuffle(keys)
+        stratum_n = sum(len(groups[key]) for key in keys)
+        target_n = max(1, round(stratum_n * validation_ratio))
+        selected_n = 0
+        for key in keys:
+            if selected_n >= target_n:
+                break
+            validation_keys.add(key)
+            selected_n += len(groups[key])
+    if len(validation_keys) == len(groups):
         raise ValueError("validation_ratio leaves no training examples")
 
     train_rows, validation_rows = [], []

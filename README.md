@@ -10,7 +10,8 @@ and a JSON-object target. Training serializes:
 
 Only target and EOS tokens contribute to cross-entropy loss. Prompt and padding
 labels are `-100`. Evaluation uses the same prompt serializer, greedy JSON
-generation, structural parsing, and shared five-way evaluation suite.
+generation, strict whole-completion JSON-object parsing, and shared five-way
+evaluation suite.
 
 ## Repository data
 
@@ -30,8 +31,9 @@ authorization_dataset_v0/data/generated/
 
 The three training files are separate experimental regimes. Each has 3,000
 regime-specific hierarchy rows plus 1,000 byte-identical `shared_capability`
-rehearsal rows by default. The five eval files are shared across regimes and
-include a held-out closed-domain injected-data subset. `validate_data.py` checks
+rehearsal rows by default. The five eval files are shared across regimes;
+`mechanism_ood` includes a held-out closed-domain injected-data subset.
+`validate_data.py` checks
 schema, canonical layout, split/regime labels, duplicate IDs, and exact
 prompt+target train/eval leakage.
 
@@ -161,7 +163,8 @@ on the same five shared files. Set `NPROC_PER_NODE=2` when a two-GPU
 allocation is available; compared regimes must use the same setting.
 
 Each full-SFT regime holds out a deterministic 10% validation split from its
-own training rows (counterfactual pairs stay together). Validation uses the
+own training rows (counterfactual triplets stay together, and shared capability
+rows receive identical train/validation membership across regimes). Validation uses the
 same completion-only loss, runs every 20 steps, restores the best
 `eval_loss` checkpoint, and stops after five validation evaluations without
 improvement. The shared five-split suite remains untouched for final reporting.
@@ -188,7 +191,7 @@ cat "$ROOT/authorization_balanced__Qwen2.5-1.5B-Instruct__full__seed0/eval_final
 
 Per-split metrics include JSON parse rate, exact structured-target accuracy,
 action accuracy, authorized and unauthorized exact/action accuracy,
-unauthorized-execution rate, counterfactual-pair accuracy, and factor
+unauthorized-execution rate, reference accuracy, counterfactual pair/triplet accuracy, and factor
 breakdowns. Predictions are in the corresponding `predictions_<split>.jsonl`.
 
 For checkpoint learning curves:
@@ -247,9 +250,11 @@ The Python entry points expose equivalent `--output-dir` and
 ## Run artifacts
 
 Each training run writes `run_config.json`, training logs, trainer history,
-`train_metrics.json`, periodic checkpoints, and `final/`. Checkpoints include
-model weights plus optimizer, scheduler, RNG, and trainer state. Evaluation
-writes per-split predictions and metrics plus `eval_summary.json`.
+`train_metrics.json`, `data_split.json`, periodic checkpoints, and `final/`.
+Checkpoints include model weights, tokenizer files, optimizer, scheduler, RNG,
+and trainer state. Post-hoc checkpoint evaluation explicitly reuses the
+tokenizer from `final/`. Evaluation writes `eval_config.json`, per-split
+predictions and metrics, plus `eval_summary.json`.
 
 For full SFT, `final/` contains model weights. For LoRA, it contains adapter
 weights/configuration and reload metadata; inference reloads the base model

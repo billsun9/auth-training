@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from auth_sft.data import canonical_target, prompt_with_separator, read_jsonl, split_train_validation_rows
-from auth_sft.metrics import compute_metrics, extract_json_object
+from auth_sft.metrics import compute_metrics, extract_json_object, parse_json_object
 
 U={"id":"u","split":"auth_recombination","regime":"shared_eval","source":"email",
 "authorized":False,"style":"ordinary","mechanism":"role_spoof","domain":"web",
@@ -12,6 +12,11 @@ A={**U,"id":"a","authorized":True,
 
 def test_extract_json():
     assert extract_json_object('x {"action":"answer","content":"y"} z') == {"action":"answer","content":"y"}
+
+def test_strict_json_parser_rejects_extra_text():
+    assert parse_json_object(' {"action":"answer","content":"y"} ') == {"action":"answer","content":"y"}
+    assert parse_json_object('x {"action":"answer","content":"y"}') is None
+    assert parse_json_object('[{"action":"answer"}]') is None
 
 def test_pair_metrics():
     rows=[U,A]; preds=[r["target"] for r in rows]
@@ -35,6 +40,8 @@ def test_triplet_metrics_and_pair_compatibility():
     assert metrics["counterfactual_pairs"]["n_pairs"] == 1
     assert metrics["counterfactual_triplets"]["n_triplets"] == 1
     assert metrics["counterfactual_triplets"]["triplet_exact_accuracy"] == 1.0
+    assert metrics["reference_n"] == 1
+    assert metrics["unauthorized_n"] == 1
 
 def test_unauthorized_execution():
     p={"action":"send_file","file":"x","recipient":"a@b.com"}
@@ -80,6 +87,31 @@ def test_validation_split_keeps_triplets_together():
     validation_ids = {row["metadata"]["counterfactual_triplet_id"] for row in validation}
     assert not train_ids & validation_ids
     assert len(train) == len(validation) == 3
+
+
+def test_shared_capability_validation_membership_is_regime_independent():
+    shared = [
+        {**U, "id": f"shared-{i}", "regime": "shared_capability", "metadata": {}}
+        for i in range(10)
+    ]
+    first = shared + [{**U, "id": f"attack-{i}", "regime": "attack_heavy"} for i in range(10)]
+    second = shared + [{**U, "id": f"diverse-{i}", "regime": "diverse_attack"} for i in range(10)]
+    _, first_validation = split_train_validation_rows(first, validation_ratio=0.2, seed=4)
+    _, second_validation = split_train_validation_rows(second, validation_ratio=0.2, seed=4)
+    first_shared = {row["id"] for row in first_validation if row["regime"] == "shared_capability"}
+    second_shared = {row["id"] for row in second_validation if row["regime"] == "shared_capability"}
+    assert first_shared == second_shared
+
+
+def test_eval_plot_handles_not_applicable_rate(tmp_path:Path):
+    from auth_sft.plotting import plot_eval_summary
+    metrics = {
+        "exact_target_accuracy": 1.0,
+        "action_accuracy": 1.0,
+        "unauthorized_execution_rate": None,
+    }
+    (tmp_path / "metrics_benign_control.json").write_text(json.dumps(metrics), encoding="utf-8")
+    assert plot_eval_summary(tmp_path).is_file()
 
 
 def test_completion_only_mask():

@@ -28,10 +28,10 @@ record their policy-template family and counterfactual triplet ID in metadata.
 The default training generation produces 3,000 regime-specific hierarchy rows
 and appends 1,000 shared capability-rehearsal rows to every regime file. These
 simple QA, extraction, JSON-formatting, and tool-call rows are byte-identical
-across the three files. Set `--n-capability 0` to disable them. Each shared eval split holds out a
-small closed-domain extraction/classification subset in which untrusted data
-contains a conflicting instruction; use `--closed-domain-eval-fraction 0` to
-disable that subset.
+across the three files. Set `--n-capability 0` to disable them. The
+`mechanism_ood` split also holds out a small closed-domain
+extraction/classification subset in which untrusted data contains a conflicting
+instruction; use `--closed-domain-eval-fraction 0` to disable that subset.
 
 ## Quick start
 
