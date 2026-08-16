@@ -1,3 +1,10 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.env
+.env.*
+wandb/
+runs/
+checkpoints/
+__pycache__/
+*.pyc
