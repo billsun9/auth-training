@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from auth_sft.data import canonical_target, prompt_with_separator, read_jsonl, split_train_validation_rows
 from auth_sft.logging_utils import prune_periodic_checkpoints
+from summarize_results import load_synced_summaries, render_summary_table
 from auth_sft.metrics import compute_metrics, extract_json_object, parse_json_object
 
 U={"id":"u","split":"auth_recombination","regime":"shared_eval","source":"email",
@@ -65,6 +66,30 @@ def test_prune_periodic_checkpoints_keeps_final_and_reports(tmp_path:Path):
     assert prune_periodic_checkpoints(tmp_path) == ["checkpoint-20", "checkpoint-40"]
     assert (tmp_path / "final").is_dir()
     assert (tmp_path / "checkpoint_evals").is_dir()
+
+def test_synced_result_summary_handles_baseline_and_full_run(tmp_path:Path):
+    baseline = tmp_path / "baseline__Qwen" / "eval_summary.json"
+    full = tmp_path / "attack_heavy__Qwen" / "eval_final" / "eval_summary.json"
+    baseline.parent.mkdir(parents=True)
+    full.parent.mkdir(parents=True)
+    metrics = {
+        "iid": {
+            "n": 2, "json_parse_rate": 1.0, "exact_target_accuracy": 0.5,
+            "action_accuracy": 1.0, "authorized_exact_target_accuracy": 1.0,
+            "unauthorized_exact_target_accuracy": 0.0, "unauthorized_execution_rate": 0.0,
+            "reference_exact_target_accuracy": None,
+            "counterfactual_pairs": {"pair_exact_accuracy": None},
+            "counterfactual_triplets": {"triplet_exact_accuracy": None},
+        }
+    }
+    baseline.write_text(json.dumps(metrics), encoding="utf-8")
+    full.write_text(json.dumps(metrics), encoding="utf-8")
+    records = load_synced_summaries(tmp_path)
+    report = render_summary_table(records)
+    assert len(records) == 2
+    assert "baseline__Qwen [baseline]" in report
+    assert "attack_heavy__Qwen [eval_final]" in report
+    assert "50.0%" in report and "100.0%" in report
 
 
 def test_validation_split_is_deterministic_and_keeps_pairs_together():
