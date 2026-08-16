@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import argparse, json, os
+import argparse, inspect, json, math, os
 from pathlib import Path
 import torch
 from transformers import Trainer, TrainingArguments, set_seed
@@ -59,11 +59,16 @@ def main():
     if a.method == "lora" and int(os.environ.get("RANK","0")) == 0:
         model.print_trainable_parameters()
 
-    ta = TrainingArguments(
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    micro_batches = math.ceil(len(ds) / (a.per_device_train_batch_size * world_size))
+    updates_per_epoch = max(1, math.ceil(micro_batches / a.gradient_accumulation_steps))
+    total_update_steps = a.max_steps if a.max_steps > 0 else math.ceil(updates_per_epoch * a.num_train_epochs)
+    resolved_warmup_steps = math.ceil(total_update_steps * a.warmup_ratio)
+    training_kwargs = dict(
         output_dir=str(out),
         run_name=a.run_name or f"{a.regime}-{Path(a.model).name}-{a.method}",
         num_train_epochs=a.num_train_epochs, max_steps=a.max_steps,
-        learning_rate=lr, weight_decay=a.weight_decay, warmup_ratio=a.warmup_ratio,
+        learning_rate=lr, weight_decay=a.weight_decay,
         per_device_train_batch_size=a.per_device_train_batch_size,
         gradient_accumulation_steps=a.gradient_accumulation_steps,
         bf16=a.dtype=="bf16", fp16=a.dtype=="fp16", tf32=torch.cuda.is_available(),
@@ -77,6 +82,13 @@ def main():
         remove_unused_columns=False, seed=a.seed, data_seed=a.seed,
         ddp_find_unused_parameters=False,
     )
+    # Transformers 5 removed warmup_ratio. Preserve the same ratio for either
+    # API so a stale cluster environment fails less surprisingly.
+    if "warmup_ratio" in inspect.signature(TrainingArguments).parameters:
+        training_kwargs["warmup_ratio"] = a.warmup_ratio
+    else:
+        training_kwargs["warmup_steps"] = resolved_warmup_steps
+    ta = TrainingArguments(**training_kwargs)
     trainer = Trainer(
         model=model, args=ta, train_dataset=ds,
         data_collator=CompletionOnlyCollator(tok.pad_token_id),
@@ -87,8 +99,9 @@ def main():
         "resolved_learning_rate":lr, "n_train_examples":len(rows),
         "min_token_length":min(ds.lengths), "max_token_length":max(ds.lengths),
         "mean_token_length":sum(ds.lengths)/len(ds.lengths),
-        "world_size":int(os.environ.get("WORLD_SIZE","1")),
-        "global_train_batch_size": a.per_device_train_batch_size * int(os.environ.get("WORLD_SIZE","1")) * a.gradient_accumulation_steps,
+        "world_size":world_size,
+        "global_train_batch_size": a.per_device_train_batch_size * world_size * a.gradient_accumulation_steps,
+        "resolved_warmup_steps": resolved_warmup_steps,
     })
     if trainer.is_world_process_zero(): write_json(out/"run_config.json", cfg)
     result = trainer.train()
