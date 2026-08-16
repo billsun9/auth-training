@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 from transformers import TrainerCallback
 
@@ -12,6 +13,13 @@ def append_jsonl(path, obj):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 class JSONLLoggingCallback(TrainerCallback):
     def __init__(self, path):

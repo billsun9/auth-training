@@ -3,8 +3,8 @@ import argparse, inspect, json, math, os
 from pathlib import Path
 import torch
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
-from auth_sft.data import DEFAULT_DATA_DIR, CompletionOnlyCollator, PromptCompletionDataset, canonical_data_paths, load_train_rows, split_train_validation_rows
-from auth_sft.logging_utils import JSONLLoggingCallback, write_json
+from auth_sft.data import DEFAULT_DATA_DIR, TRAIN_FILES, CompletionOnlyCollator, PromptCompletionDataset, canonical_data_paths, load_train_rows, split_train_validation_rows
+from auth_sft.logging_utils import JSONLLoggingCallback, sha256_file, write_json
 from auth_sft.modeling import load_tokenizer, load_training_model
 
 def args_parser():
@@ -107,12 +107,17 @@ def main():
     callbacks = [JSONLLoggingCallback(out/"logs"/"train_log.jsonl")]
     if validation_ds and a.early_stopping_patience > 0:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=a.early_stopping_patience))
-    trainer = Trainer(
+    trainer_kwargs = dict(
         model=model, args=ta, train_dataset=ds,
         eval_dataset=validation_ds,
         data_collator=CompletionOnlyCollator(tok.pad_token_id),
         callbacks=callbacks,
     )
+    if "processing_class" in inspect.signature(Trainer).parameters:
+        trainer_kwargs["processing_class"] = tok
+    else:
+        trainer_kwargs["tokenizer"] = tok
+    trainer = Trainer(**trainer_kwargs)
     cfg = vars(a).copy()
     cfg.update({
         "resolved_learning_rate":lr, "n_train_examples":len(train_rows),
@@ -122,8 +127,16 @@ def main():
         "world_size":world_size,
         "global_train_batch_size": a.per_device_train_batch_size * world_size * a.gradient_accumulation_steps,
         "resolved_warmup_steps": resolved_warmup_steps,
+        "train_file_sha256": sha256_file(Path(a.data_dir) / TRAIN_FILES[a.regime]),
     })
-    if trainer.is_world_process_zero(): write_json(out/"run_config.json", cfg)
+    if trainer.is_world_process_zero():
+        write_json(out/"run_config.json", cfg)
+        write_json(out/"data_split.json", {
+            "seed": a.seed,
+            "validation_ratio": a.validation_ratio,
+            "train_ids": [row["id"] for row in train_rows],
+            "validation_ids": [row["id"] for row in validation_rows],
+        })
     result = trainer.train()
     trainer.save_state()
     final = out/"final"

@@ -37,8 +37,9 @@ def load_training_model(model_name, method, dtype, gradient_checkpointing,
     )
     return get_peft_model(model, cfg)
 
-def load_inference_model(model_name_or_path, dtype="bf16", cache_dir=None):
+def load_inference_model(model_name_or_path, dtype="bf16", cache_dir=None, tokenizer_name_or_path=None):
     path = Path(model_name_or_path)
+    tokenizer_source = tokenizer_name_or_path or model_name_or_path
     if (path / "adapter_config.json").is_file():
         from peft import PeftConfig, PeftModel
         cfg = PeftConfig.from_pretrained(model_name_or_path)
@@ -47,13 +48,13 @@ def load_inference_model(model_name_or_path, dtype="bf16", cache_dir=None):
             device_map="auto", low_cpu_mem_usage=True, cache_dir=cache_dir
         )
         model = PeftModel.from_pretrained(base, model_name_or_path)
-        tokenizer = load_tokenizer(model_name_or_path, cache_dir=cache_dir)
+        tokenizer = load_tokenizer(tokenizer_source, cache_dir=cache_dir)
     else:
         model = AutoModelForCausalLM.from_pretrained(
             model_name_or_path, torch_dtype=dtype_from_name(dtype),
             device_map="auto", low_cpu_mem_usage=True, cache_dir=cache_dir
         )
-        tokenizer = load_tokenizer(model_name_or_path, cache_dir=cache_dir)
+        tokenizer = load_tokenizer(tokenizer_source, cache_dir=cache_dir)
     model.eval()
     model.config.use_cache = True
     return model, tokenizer

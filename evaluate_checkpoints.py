@@ -14,6 +14,7 @@ def main():
     if not ckpts: raise SystemExit(f"No checkpoints under {run}")
     for ck in ckpts:
         cmd=[sys.executable,"evaluate.py","--data-dir",a.data_dir,"--model",str(ck),
+             "--tokenizer",str(run/"final"),
              "--output-dir",str(run/"checkpoint_evals"/ck.name),"--batch-size",str(a.batch_size),
              "--dtype",a.dtype,"--hf-cache-dir",a.hf_cache_dir,"--splits","all"]
         if a.max_samples_per_split is not None:

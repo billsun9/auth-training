@@ -124,7 +124,10 @@ def plot_eval_summary(eval_dir: str | Path, output_dir: str | Path | None = None
     )
     x = list(range(len(rows)))
     for axis, (field, title) in zip(axes, metrics):
-        values = [metrics_row.get(field) for _, metrics_row in rows]
+        values = [
+            value if isinstance(value, (int, float)) else float("nan")
+            for value in (metrics_row.get(field) for _, metrics_row in rows)
+        ]
         axis.bar(x, values)
         axis.set_title(title)
         axis.set_ylim(0, 1)

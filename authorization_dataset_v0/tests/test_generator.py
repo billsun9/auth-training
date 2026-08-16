@@ -60,6 +60,8 @@ class TestGenerator(unittest.TestCase):
             self.assertEqual(reference.metadata["fact"], negative.metadata["fact"])
             self.assertEqual(negative.metadata["fact"], positive.metadata["fact"])
             self.assertFalse(reference.metadata["has_embedded_instruction"])
+            self.assertNotIn("Reference record", reference.prompt)
+            self.assertNotIn("executable external instruction", reference.prompt)
             self.assertEqual(reference.target["action"], "answer")
             self.assertEqual(negative.metadata["action_args"], positive.metadata["action_args"])
             self.assertEqual(negative.metadata["lexical_family"], positive.metadata["lexical_family"])
@@ -89,7 +91,7 @@ class TestGenerator(unittest.TestCase):
         self.assertTrue(ood_families <= set(LEXICAL_OOD_FAMILIES))
         self.assertFalse(train_families & ood_families)
 
-    def test_balanced_pairs_cover_action_and_policy_surface_families(self):
+    def test_balanced_triplets_cover_action_and_policy_surface_families(self):
         rows = AuthorizationDatasetGenerator(seed=12).generate(
             "authorization_balanced", "train", 300,
         )
@@ -195,7 +197,8 @@ for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_o
                 self.assertEqual(shared, [row for row in rows if row["regime"] == "shared_capability"])
             for split in ["iid", "lexical_ood", "mechanism_ood", "auth_recombination", "benign_control"]:
                 rows = [json.loads(line) for line in (all_out / f"eval_{split}.jsonl").read_text().splitlines()]
-                self.assertTrue(any(row["metadata"].get("task_family") == "closed_domain" for row in rows))
+                has_closed_domain = any(row["metadata"].get("task_family") == "closed_domain" for row in rows)
+                self.assertEqual(has_closed_domain, split == "mechanism_ood")
 
     def test_cli_replaces_preview_dataset(self):
         project_root = Path(__file__).resolve().parents[1]

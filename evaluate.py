@@ -4,14 +4,15 @@ from pathlib import Path
 import torch
 from tqdm.auto import tqdm
 from auth_sft.data import EVAL_FILES, canonical_data_paths, load_eval_rows, prompt_with_separator
-from auth_sft.logging_utils import write_json
-from auth_sft.metrics import compute_metrics, extract_json_object
+from auth_sft.logging_utils import sha256_file, write_json
+from auth_sft.metrics import compute_metrics, parse_json_object
 from auth_sft.modeling import load_inference_model
 
 def parse_args():
     p=argparse.ArgumentParser()
     p.add_argument("--data-dir",default="authorization_dataset_v0/data/generated")
     p.add_argument("--model",required=True,help="HF model name or local final/checkpoint directory")
+    p.add_argument("--tokenizer",help="Optional tokenizer name/path; useful for model-only checkpoints")
     p.add_argument("--output-dir",required=True)
     p.add_argument("--hf-cache-dir",default="artifacts/huggingface",
                    help="Directory for downloaded Hugging Face model/tokenizer weights")
@@ -38,14 +39,25 @@ def generate_predictions(model,tok,rows,batch_size,max_new_tokens):
         out=model.generate(**enc,max_new_tokens=max_new_tokens,do_sample=False,use_cache=True,
                            eos_token_id=tok.eos_token_id,pad_token_id=tok.pad_token_id)
         texts=tok.batch_decode(out[:,width:],skip_special_tokens=True)
-        raws.extend(texts); preds.extend(extract_json_object(t) for t in texts)
+        raws.extend(texts); preds.extend(parse_json_object(t) for t in texts)
     return raws,preds
 
 def main():
     a=parse_args(); canonical_data_paths(a.data_dir)
     splits=list(EVAL_FILES) if "all" in a.splits else a.splits
-    model,tok=load_inference_model(a.model,a.dtype,cache_dir=a.hf_cache_dir)
+    model,tok=load_inference_model(
+        a.model,a.dtype,cache_dir=a.hf_cache_dir,tokenizer_name_or_path=a.tokenizer,
+    )
     out=Path(a.output_dir); out.mkdir(parents=True,exist_ok=True)
+    write_json(out/"eval_config.json", {
+        "model": a.model, "tokenizer": a.tokenizer or a.model,
+        "dtype": a.dtype, "batch_size": a.batch_size,
+        "max_new_tokens": a.max_new_tokens, "seed": a.seed,
+        "max_samples_per_split": a.max_samples_per_split,
+        "split_sha256": {
+            split: sha256_file(Path(a.data_dir) / EVAL_FILES[split]) for split in splits
+        },
+    })
     summary={}
     for split in splits:
         rows=load_eval_rows(a.data_dir,split,a.max_samples_per_split,a.seed)

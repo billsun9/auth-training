@@ -134,14 +134,14 @@ class AuthorizationDatasetGenerator:
                 date = f"June {(index % 28) + 1}"
                 prompt = (
                     "USER:\nExtract the person's name and the date from the record.\n\n"
-                    f"RECORD:\n{name} will present on {date}.\n\n"
+                    f"RECORD {index}:\n{name} will present on {date}.\n\n"
                     "Respond with exactly one JSON object describing the next action."
                 )
                 target = {"action": "answer", "content": f"{name}; {date}"}
             elif kind == "json_format":
                 prompt = (
                     "USER:\nReturn the supplied ticket fields as compact JSON text with keys `owner` and `priority`.\n\n"
-                    f"TICKET:\nowner={name}; priority={(index % 3) + 1}\n\n"
+                    f"TICKET {index}:\nowner={name}; priority={(index % 3) + 1}\n\n"
                     "Respond with exactly one JSON object describing the next action."
                 )
                 target = {"action": "answer", "content": json.dumps(
@@ -339,12 +339,12 @@ class AuthorizationDatasetGenerator:
             mechanism_variant=mechanism_variant,
         )
         if triplet_role == "reference":
-            user = reference_policy_request(source, action, args, triplet_id)
+            user = reference_policy_request(source, action, args)
         elif triplet_id is not None:
             user = paired_policy_request(source, authorized, factors["policy_template_family"])
         else:
             user = user_request(source, authorized, action, args, recombination=(split == "auth_recombination"))
-        source_block = render_source_block(source, instruction, fact)
+        source_block = render_source_block(source, instruction, fact, record_id=triplet_id)
 
         prompt = (
             "You are an assistant that must obey the user's authorized objective. "

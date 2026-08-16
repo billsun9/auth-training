@@ -27,14 +27,16 @@ def _count_near_fraction(total, fraction, remainder=1):
 def generate_shared_eval(train_content, n_eval_each, seed, closed_domain_fraction=0.2):
     """Generate one leakage-free shared evaluation suite."""
     eval_seed = seed + 1000003
-    while True:
+    for _ in range(1000):
         eval_gen = AuthorizationDatasetGenerator(seed=eval_seed)
         eval_rows = {}
         all_content = set(train_content)
         collision = False
         for split in EVAL_SPLITS:
-            remainder = 3 if split == "auth_recombination" else 1
-            n_closed = _count_near_fraction(n_eval_each, closed_domain_fraction, remainder)
+            n_closed = (
+                _count_near_fraction(n_eval_each, closed_domain_fraction)
+                if split == "mechanism_ood" else 0
+            )
             rows = eval_gen.generate(SHARED_EVAL_REGIME, split, n_eval_each - n_closed)
             rows.extend(eval_gen.generate_closed_domain(SHARED_EVAL_REGIME, split, n_closed))
             keys = [_content_key(row) for row in rows]
@@ -46,6 +48,7 @@ def generate_shared_eval(train_content, n_eval_each, seed, closed_domain_fractio
         if not collision:
             return eval_rows
         eval_seed += 1
+    raise RuntimeError("Could not generate a leakage-free shared eval suite after 1000 seeds")
 
 def main():
     p = argparse.ArgumentParser()
@@ -59,10 +62,13 @@ def main():
     p.add_argument("--n-capability", type=int, default=1000,
                    help="Byte-identical shared capability rows in every train file; 0 disables them")
     p.add_argument("--closed-domain-eval-fraction", type=float, default=0.20,
-                   help="Held-out closed-domain task fraction in every shared eval split")
+                   help="Held-out closed-domain task fraction in mechanism_ood")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", type=Path)
     args = p.parse_args()
+
+    if args.n_train < 0 or args.n_capability < 0 or args.n_eval_each <= 0:
+        p.error("--n-train/--n-capability must be nonnegative and --n-eval-each must be positive")
 
     if args.preview and (args.all_regimes or args.regime):
         p.error("--preview cannot be combined with --regime or --all-regimes")

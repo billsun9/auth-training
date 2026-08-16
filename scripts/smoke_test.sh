@@ -7,6 +7,18 @@ ARTIFACT_ROOT="${ARTIFACT_ROOT:-artifacts}"
 OUT="${SMOKE_OUT:-$ARTIFACT_ROOT/runs/smoke_authorization_balanced}"
 HF_CACHE_DIR="${HF_CACHE_DIR:-$ARTIFACT_ROOT/huggingface}"
 WANDB_DIR="${WANDB_DIR:-$ARTIFACT_ROOT/wandb}"
+
+OUT_ROOT="${OUT_ROOT:-$ARTIFACT_ROOT/runs}"
+case "$OUT" in
+  "$OUT_ROOT"/*) ;;
+  *) echo "Refusing to remove smoke output outside OUT_ROOT: $OUT" >&2; exit 2 ;;
+esac
+if [[ -e "$OUT" ]]; then
+  echo "Removing previous smoke output: $OUT"
+  rm -rf "$OUT"
+fi
+echo "Starting fresh smoke test: $OUT"
+
 python validate_data.py --data-dir "$DATA_DIR"
 python train_sft.py \
   --data-dir "$DATA_DIR" --regime authorization_balanced --model "$MODEL" \
