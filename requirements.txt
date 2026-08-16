@@ -5,3 +5,4 @@ peft>=0.13,<1
 tqdm>=4.66
 wandb>=0.18
 pytest>=8
+matplotlib>=3.8

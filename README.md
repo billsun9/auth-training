@@ -131,10 +131,11 @@ runs on `attack_heavy` and `authorization_balanced`:
 bash auth-training/copy_helper.sh initial
 ```
 
-This uses Qwen2.5-0.5B-Instruct, full-parameter SFT, BF16, two GPUs by default,
+This uses Qwen2.5-0.5B-Instruct, full-parameter SFT, BF16, one GPU by default,
 per-device batch size 2, gradient accumulation 4, nominal global batch size
-16, two epochs, learning rate `2e-5`, gradient checkpointing, and greedy eval
-on the same five shared files. Set `NPROC_PER_NODE=1` for a one-GPU allocation.
+8, two epochs, learning rate `2e-5`, gradient checkpointing, and greedy eval
+on the same five shared files. Set `NPROC_PER_NODE=2` when a two-GPU
+allocation is available; compared regimes must use the same setting.
 
 Results are under:
 
@@ -168,6 +169,34 @@ python evaluate_checkpoints.py \
   --hf-cache-dir /local/bys2107/research/auth-training/artifacts/huggingface
 ```
 
+## W&B-independent visualizations
+
+The repository includes `plot_results.py`, which uses the local JSON artifacts
+and does not require a W&B account or network access. Install the added
+`matplotlib` dependency with `python -m pip install -r requirements.txt`, then
+run it from the local node copy after a smoke or training run:
+
+```bash
+RUN=/local/bys2107/research/auth-training/artifacts/runs/authorization_balanced__Qwen2.5-0.5B-Instruct__full__seed0
+python plot_results.py --run-dir "$RUN"
+```
+
+It writes PNGs to `$RUN/plots/`:
+
+- `training_progress.png`: logged loss, learning rate, and gradient norm over optimizer steps;
+- `checkpoint_eval_progress.png`: exact-target accuracy, action accuracy, and unauthorized-execution rate across checkpoint evaluations and final;
+- `eval_summary.png`: final metrics across the five eval splits.
+
+Choose another output location with `--output-dir`. For the smoke run, use:
+
+```bash
+python plot_results.py \
+  --run-dir /local/bys2107/research/auth-training/artifacts/runs/smoke_authorization_balanced
+```
+
+The plotting command only reads existing logs/metrics and writes small PNG
+files; it does not load the model or run evaluation.
+
 ## Direct scripts
 
 If already running from the local copy, the underlying commands are:
@@ -180,6 +209,7 @@ bash scripts/run_full_matrix.sh
 
 Useful configuration variables include `ARTIFACT_ROOT`, `OUT_ROOT`,
 `HF_CACHE_DIR`, `WANDB_DIR`, `NPROC_PER_NODE`, `MODEL`, `SEED`, and `DATA_DIR`.
+The copy helper sets `DATA_DIR` to the absolute local-copy path automatically.
 The Python entry points expose equivalent `--output-dir` and
 `--hf-cache-dir` options.
 
