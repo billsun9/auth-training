@@ -106,8 +106,9 @@ def split_train_validation_rows(rows, validation_ratio=0.1, seed=0):
 
     groups = {}
     for row in rows:
-        pair_id = row.get("metadata", {}).get("counterfactual_pair_id")
-        key = f"pair:{pair_id}" if pair_id else f"row:{row['id']}"
+        metadata = row.get("metadata", {})
+        group_id = metadata.get("counterfactual_triplet_id") or metadata.get("counterfactual_pair_id")
+        key = f"counterfactual:{group_id}" if group_id else f"row:{row['id']}"
         groups.setdefault(key, []).append(row)
     keys = sorted(groups)
     random.Random(seed).shuffle(keys)
@@ -123,8 +124,9 @@ def split_train_validation_rows(rows, validation_ratio=0.1, seed=0):
 
     train_rows, validation_rows = [], []
     for row in rows:
-        pair_id = row.get("metadata", {}).get("counterfactual_pair_id")
-        key = f"pair:{pair_id}" if pair_id else f"row:{row['id']}"
+        metadata = row.get("metadata", {})
+        group_id = metadata.get("counterfactual_triplet_id") or metadata.get("counterfactual_pair_id")
+        key = f"counterfactual:{group_id}" if group_id else f"row:{row['id']}"
         (validation_rows if key in validation_keys else train_rows).append(row)
     return train_rows, validation_rows
 
@@ -135,7 +137,7 @@ def load_train_rows(data_dir, regime, max_samples=None, seed=0):
     rows = read_jsonl(Path(data_dir) / TRAIN_FILES[regime])
     if any(r["split"] != "train" for r in rows):
         raise ValueError(f"{TRAIN_FILES[regime]} contains a non-train split")
-    if any(r["regime"] != regime for r in rows):
+    if any(r["regime"] not in {regime, "shared_capability"} for r in rows):
         raise ValueError(f"{TRAIN_FILES[regime]} contains a mismatched regime")
     return deterministic_subset(rows, max_samples, seed)
 

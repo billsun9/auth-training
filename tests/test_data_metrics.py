@@ -20,6 +20,22 @@ def test_pair_metrics():
     assert m["unauthorized_execution_rate"]==0.0
     assert m["counterfactual_pairs"]["pair_exact_accuracy"]==1.0
 
+
+def test_triplet_metrics_and_pair_compatibility():
+    triplet_id = "triplet"
+    reference = {**U, "id": "r", "metadata": {"counterfactual_pair_id": triplet_id,
+        "counterfactual_triplet_id": triplet_id, "triplet_role": "reference"}}
+    unauthorized = {**U, "id": "u", "metadata": {"counterfactual_pair_id": triplet_id,
+        "counterfactual_triplet_id": triplet_id, "triplet_role": "unauthorized"}}
+    authorized = {**A, "id": "a", "metadata": {"counterfactual_pair_id": triplet_id,
+        "counterfactual_triplet_id": triplet_id, "triplet_role": "authorized"}}
+    rows = [reference, unauthorized, authorized]
+    preds = [row["target"] for row in rows]
+    metrics = compute_metrics(rows, [canonical_target(pred) for pred in preds], preds)
+    assert metrics["counterfactual_pairs"]["n_pairs"] == 1
+    assert metrics["counterfactual_triplets"]["n_triplets"] == 1
+    assert metrics["counterfactual_triplets"]["triplet_exact_accuracy"] == 1.0
+
 def test_unauthorized_execution():
     p={"action":"send_file","file":"x","recipient":"a@b.com"}
     assert compute_metrics([U],[canonical_target(p)],[p])["unauthorized_execution_rate"]==1.0
@@ -50,6 +66,20 @@ def test_validation_split_is_deterministic_and_keeps_pairs_together():
     train_pairs = {row["metadata"]["counterfactual_pair_id"] for row in train}
     validation_pairs = {row["metadata"]["counterfactual_pair_id"] for row in validation}
     assert not train_pairs & validation_pairs
+
+
+def test_validation_split_keeps_triplets_together():
+    rows = []
+    for triplet_id in ("triplet-1", "triplet-2"):
+        for role, row in (("reference", U), ("unauthorized", U), ("authorized", A)):
+            rows.append({**row, "id": f"{triplet_id}-{role}", "metadata": {
+                "counterfactual_triplet_id": triplet_id, "triplet_role": role,
+            }})
+    train, validation = split_train_validation_rows(rows, validation_ratio=0.5, seed=1)
+    train_ids = {row["metadata"]["counterfactual_triplet_id"] for row in train}
+    validation_ids = {row["metadata"]["counterfactual_triplet_id"] for row in validation}
+    assert not train_ids & validation_ids
+    assert len(train) == len(validation) == 3
 
 
 def test_completion_only_mask():

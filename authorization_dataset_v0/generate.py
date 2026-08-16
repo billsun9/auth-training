@@ -16,7 +16,15 @@ def _content_key(row):
     return row.prompt, json.dumps(row.target, sort_keys=True, separators=(",", ":"))
 
 
-def generate_shared_eval(train_content, n_eval_each, seed):
+def _count_near_fraction(total, fraction, remainder=1):
+    if not 0 <= fraction < 1:
+        raise ValueError("fraction must be in [0, 1)")
+    desired = round(total * fraction)
+    candidates = [count for count in range(total + 1) if (total - count) % remainder == 0]
+    return min(candidates, key=lambda count: (abs(count - desired), count))
+
+
+def generate_shared_eval(train_content, n_eval_each, seed, closed_domain_fraction=0.2):
     """Generate one leakage-free shared evaluation suite."""
     eval_seed = seed + 1000003
     while True:
@@ -25,7 +33,10 @@ def generate_shared_eval(train_content, n_eval_each, seed):
         all_content = set(train_content)
         collision = False
         for split in EVAL_SPLITS:
-            rows = eval_gen.generate(SHARED_EVAL_REGIME, split, n_eval_each)
+            remainder = 3 if split == "auth_recombination" else 1
+            n_closed = _count_near_fraction(n_eval_each, closed_domain_fraction, remainder)
+            rows = eval_gen.generate(SHARED_EVAL_REGIME, split, n_eval_each - n_closed)
+            rows.extend(eval_gen.generate_closed_domain(SHARED_EVAL_REGIME, split, n_closed))
             keys = [_content_key(row) for row in rows]
             if any(key in all_content for key in keys):
                 collision = True
@@ -42,8 +53,13 @@ def main():
     p.add_argument("--all-regimes", action="store_true")
     p.add_argument("--preview", action="store_true",
                    help="Replace data/preview with 20 balanced-train rows and 10 rows per eval split")
-    p.add_argument("--n-train", type=int, default=1000)
+    p.add_argument("--n-train", type=int, default=2500,
+                   help="Regime-specific hierarchy rows per training file")
     p.add_argument("--n-eval-each", type=int, default=100)
+    p.add_argument("--n-capability", type=int, default=1000,
+                   help="Byte-identical shared capability rows in every train file; 0 disables them")
+    p.add_argument("--closed-domain-eval-fraction", type=float, default=0.20,
+                   help="Held-out closed-domain task fraction in every shared eval split")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--out", type=Path)
     args = p.parse_args()
@@ -63,7 +79,10 @@ def main():
             "authorization_balanced", "train", 20,
         )
         write_jsonl(out / "train_20.jsonl", train_rows)
-        eval_rows = generate_shared_eval({_content_key(row) for row in train_rows}, 10, args.seed)
+        eval_rows = generate_shared_eval(
+            {_content_key(row) for row in train_rows}, 10, args.seed,
+            closed_domain_fraction=args.closed_domain_eval_fraction,
+        )
         for split, rows in eval_rows.items():
             write_jsonl(out / f"{split}_10.jsonl", rows)
         print(f"generated preview dataset: {out}")
@@ -72,15 +91,16 @@ def main():
     out = args.out or DATA_ROOT / "generated"
 
     regimes = REGIMES if args.all_regimes else [args.regime]
+    capability_rows = AuthorizationDatasetGenerator(seed=args.seed + 2000003).generate_capability_rehearsal(
+        args.n_capability,
+    )
     for regime in regimes:
         # A fresh RNG makes each train set depend only on its regime and the
         # requested seed, never on which other regimes were generated first.
         train_gen = AuthorizationDatasetGenerator(seed=args.seed)
-        write_jsonl(
-            out / f"train_{regime}.jsonl",
-            train_gen.generate(regime, "train", args.n_train),
-        )
-        print(f"generated train_{regime}: {args.n_train}")
+        rows = train_gen.generate(regime, "train", args.n_train) + capability_rows
+        write_jsonl(out / f"train_{regime}.jsonl", rows)
+        print(f"generated train_{regime}: {len(rows)} ({args.n_train} hierarchy + {args.n_capability} shared capability)")
 
     # Evaluation examples are generated once from a dedicated stream and are
     # rejected/regenerated as a whole if finite-space sampling creates an
@@ -91,7 +111,10 @@ def main():
         for line in path.open(encoding="utf-8"):
             row = json.loads(line)
             train_content.add((row["prompt"], json.dumps(row["target"], sort_keys=True, separators=(",", ":"))))
-    eval_rows = generate_shared_eval(train_content, args.n_eval_each, args.seed)
+    eval_rows = generate_shared_eval(
+        train_content, args.n_eval_each, args.seed,
+        closed_domain_fraction=args.closed_domain_eval_fraction,
+    )
     for split, rows in eval_rows.items():
         write_jsonl(out / f"eval_{split}.jsonl", rows)
     print(f"generated shared eval suite: {len(EVAL_SPLITS) * args.n_eval_each}")
