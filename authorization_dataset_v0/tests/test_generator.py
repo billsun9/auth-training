@@ -38,24 +38,30 @@ class TestGenerator(unittest.TestCase):
         self.assertTrue(all(r.mechanism in HELD_OUT_MECHANISMS for r in rows))
         self.assertEqual({r.mechanism for r in rows}, set(HELD_OUT_MECHANISMS))
 
-    def test_balanced_training_examples_are_matched_counterfactual_pairs(self):
+    def test_balanced_training_examples_are_matched_counterfactual_triplets(self):
         rows = AuthorizationDatasetGenerator(seed=3).generate(
-            "authorization_balanced", "train", 100,
+            "authorization_balanced", "train", 99,
         )
-        pairs = defaultdict(list)
+        triplets = defaultdict(list)
         for row in rows:
-            pairs[row.metadata["counterfactual_pair_id"]].append(row)
+            triplets[row.metadata["counterfactual_triplet_id"]].append(row)
 
-        self.assertEqual(len(pairs), 50)
-        for pair in pairs.values():
-            self.assertEqual(len(pair), 2)
-            by_auth = {row.authorized: row for row in pair}
-            self.assertEqual(set(by_auth), {False, True})
-            negative, positive = by_auth[False], by_auth[True]
+        self.assertEqual(len(triplets), 33)
+        for triplet in triplets.values():
+            self.assertEqual(len(triplet), 3)
+            by_role = {row.metadata["triplet_role"]: row for row in triplet}
+            self.assertEqual(set(by_role), {"reference", "unauthorized", "authorized"})
+            reference = by_role["reference"]
+            negative = by_role["unauthorized"]
+            positive = by_role["authorized"]
             for field in ["source", "domain", "candidate_action", "style", "mechanism"]:
+                self.assertEqual(getattr(reference, field), getattr(negative, field))
                 self.assertEqual(getattr(negative, field), getattr(positive, field))
-            self.assertEqual(negative.metadata["action_args"], positive.metadata["action_args"])
+            self.assertEqual(reference.metadata["fact"], negative.metadata["fact"])
             self.assertEqual(negative.metadata["fact"], positive.metadata["fact"])
+            self.assertFalse(reference.metadata["has_embedded_instruction"])
+            self.assertEqual(reference.target["action"], "answer")
+            self.assertEqual(negative.metadata["action_args"], positive.metadata["action_args"])
             self.assertEqual(negative.metadata["lexical_family"], positive.metadata["lexical_family"])
             self.assertEqual(
                 negative.metadata["action_phrase_family"],
@@ -152,14 +158,14 @@ for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_o
             subprocess.run(
                 [
                     sys.executable, "generate.py", "--all-regimes", "--n-train", "20",
-                    "--n-eval-each", "8", "--seed", "9", "--out", str(all_out),
+                    "--n-capability", "5", "--n-eval-each", "8", "--seed", "9", "--out", str(all_out),
                 ],
                 cwd=project_root, check=True, capture_output=True,
             )
             subprocess.run(
                 [
                     sys.executable, "generate.py", "--regime", "attack_heavy", "--n-train", "20",
-                    "--n-eval-each", "8", "--seed", "9", "--out", str(one_out),
+                    "--n-capability", "5", "--n-eval-each", "8", "--seed", "9", "--out", str(one_out),
                 ],
                 cwd=project_root, check=True, capture_output=True,
             )
@@ -179,6 +185,37 @@ for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_o
                     (all_out / f"eval_{split}.jsonl").read_bytes(),
                     (one_out / f"eval_{split}.jsonl").read_bytes(),
                 )
+            all_rows = {
+                regime: [json.loads(line) for line in (all_out / f"train_{regime}.jsonl").read_text().splitlines()]
+                for regime in ["attack_heavy", "diverse_attack", "authorization_balanced"]
+            }
+            shared = [row for row in all_rows["attack_heavy"] if row["regime"] == "shared_capability"]
+            self.assertEqual(len(shared), 5)
+            for rows in all_rows.values():
+                self.assertEqual(shared, [row for row in rows if row["regime"] == "shared_capability"])
+            for split in ["iid", "lexical_ood", "mechanism_ood", "auth_recombination", "benign_control"]:
+                rows = [json.loads(line) for line in (all_out / f"eval_{split}.jsonl").read_text().splitlines()]
+                self.assertTrue(any(row["metadata"].get("task_family") == "closed_domain" for row in rows))
+
+    def test_cli_replaces_preview_dataset(self):
+        project_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            preview_out = Path(temp_dir) / "preview"
+            preview_out.mkdir()
+            (preview_out / "stale.txt").write_text("stale", encoding="utf-8")
+            subprocess.run(
+                [sys.executable, "generate.py", "--preview", "--out", str(preview_out)],
+                cwd=project_root, check=True, capture_output=True,
+            )
+            self.assertEqual(
+                {path.name for path in preview_out.iterdir()},
+                {
+                    "train_20.jsonl", "iid_10.jsonl", "lexical_ood_10.jsonl",
+                    "mechanism_ood_10.jsonl", "auth_recombination_10.jsonl",
+                    "benign_control_10.jsonl",
+                },
+            )
+            self.assertEqual(len((preview_out / "train_20.jsonl").read_text().splitlines()), 20)
 
     def test_benign_control_supports_a_200_example_eval_split(self):
         rows = AuthorizationDatasetGenerator(seed=13).generate(

@@ -95,6 +95,41 @@ def deterministic_subset(rows, max_samples, seed):
     random.Random(seed).shuffle(idx)
     return [rows[i] for i in sorted(idx[:max_samples])]
 
+def split_train_validation_rows(rows, validation_ratio=0.1, seed=0):
+    """Deterministically split rows, keeping counterfactual pairs together."""
+    if not 0 <= validation_ratio < 1:
+        raise ValueError("validation_ratio must be in [0, 1)")
+    if validation_ratio == 0:
+        return list(rows), []
+    if len(rows) < 2:
+        raise ValueError("At least two rows are required for a validation split")
+
+    groups = {}
+    for row in rows:
+        metadata = row.get("metadata", {})
+        group_id = metadata.get("counterfactual_triplet_id") or metadata.get("counterfactual_pair_id")
+        key = f"counterfactual:{group_id}" if group_id else f"row:{row['id']}"
+        groups.setdefault(key, []).append(row)
+    keys = sorted(groups)
+    random.Random(seed).shuffle(keys)
+    target_n = max(1, round(len(rows) * validation_ratio))
+    validation_keys, validation_n = set(), 0
+    for key in keys:
+        if validation_n >= target_n:
+            break
+        validation_keys.add(key)
+        validation_n += len(groups[key])
+    if len(validation_keys) == len(keys):
+        raise ValueError("validation_ratio leaves no training examples")
+
+    train_rows, validation_rows = [], []
+    for row in rows:
+        metadata = row.get("metadata", {})
+        group_id = metadata.get("counterfactual_triplet_id") or metadata.get("counterfactual_pair_id")
+        key = f"counterfactual:{group_id}" if group_id else f"row:{row['id']}"
+        (validation_rows if key in validation_keys else train_rows).append(row)
+    return train_rows, validation_rows
+
 def load_train_rows(data_dir, regime, max_samples=None, seed=0):
     if regime not in TRAIN_FILES:
         raise ValueError(f"Unknown regime: {regime}")
@@ -102,7 +137,7 @@ def load_train_rows(data_dir, regime, max_samples=None, seed=0):
     rows = read_jsonl(Path(data_dir) / TRAIN_FILES[regime])
     if any(r["split"] != "train" for r in rows):
         raise ValueError(f"{TRAIN_FILES[regime]} contains a non-train split")
-    if any(r["regime"] != regime for r in rows):
+    if any(r["regime"] not in {regime, "shared_capability"} for r in rows):
         raise ValueError(f"{TRAIN_FILES[regime]} contains a mismatched regime")
     return deterministic_subset(rows, max_samples, seed)
 
