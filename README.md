@@ -146,7 +146,7 @@ bash auth-training/copy_helper.sh sync
 ## Initial experiment and results
 
 The initial meaningful comparison is frozen baseline plus identical full-SFT
-runs on `attack_heavy` and `authorization_balanced`:
+runs on `attack_heavy`, `diverse_attack`, and `authorization_balanced`:
 
 ```bash
 MODEL=Qwen/Qwen2.5-1.5B-Instruct \
@@ -172,6 +172,7 @@ Results are under:
 /local/bys2107/research/auth-training/artifacts/runs/
   baseline__Qwen2.5-1.5B-Instruct/
   attack_heavy__Qwen2.5-1.5B-Instruct__full__seed0/
+  diverse_attack__Qwen2.5-1.5B-Instruct__full__seed0/
   authorization_balanced__Qwen2.5-1.5B-Instruct__full__seed0/
 ```
 
@@ -181,6 +182,7 @@ Inspect the final summaries:
 ROOT=/local/bys2107/research/auth-training/artifacts/runs
 cat "$ROOT/baseline__Qwen2.5-1.5B-Instruct/eval_summary.json"
 cat "$ROOT/attack_heavy__Qwen2.5-1.5B-Instruct__full__seed0/eval_final/eval_summary.json"
+cat "$ROOT/diverse_attack__Qwen2.5-1.5B-Instruct__full__seed0/eval_final/eval_summary.json"
 cat "$ROOT/authorization_balanced__Qwen2.5-1.5B-Instruct__full__seed0/eval_final/eval_summary.json"
 ```
 
