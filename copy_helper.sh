@@ -53,6 +53,7 @@ export DATA_DIR="$DST/authorization_dataset_v0/data/generated"
 export NPROC_PER_NODE="${NPROC_PER_NODE:-1}"
 
 python validate_data.py --data-dir "$DST/authorization_dataset_v0/data/generated"
+python -c 'import torch; print(f"Torch: {torch.__version__}; CUDA available: {torch.cuda.is_available()}; CUDA build: {torch.version.cuda}"); raise SystemExit("CUDA is unavailable; install a CUDA-compatible PyTorch build before training") if not torch.cuda.is_available() else None'
 
 case "$PROFILE" in
   smoke) bash scripts/smoke_test.sh ;;

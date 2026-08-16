@@ -45,6 +45,19 @@ python -m pip install -r requirements.txt
 python validate_data.py
 ```
 
+The installed PyTorch CUDA build must be compatible with the cluster driver.
+For the RTX A6000 nodes described here (driver CUDA 12.9), use a CUDA 12.x
+PyTorch build. If `torch.cuda.is_available()` is `False` or emits a driver
+version warning, fix the environment before running training; otherwise the
+job can fall back to CPU or fail during initialization. Transformers 4.x and
+5.x are supported by the training script, but use the repository requirements
+file rather than an unrelated system environment.
+
+`copy_helper.sh` performs this CUDA check before launching any profile and
+stops with a clear error if CUDA is unavailable. Do not continue past a
+PyTorch warning such as `NVIDIA driver ... is too old`; reinstall/select a
+CUDA-12-compatible PyTorch build in the cluster environment first.
+
 The first smoke or training run downloads the Qwen2.5-0.5B-Instruct tokenizer
 and model into the configured local Hugging Face cache. Qwen2.5-0.5B-Instruct
 is the default model and does not require a private repository credential.
