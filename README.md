@@ -139,6 +139,18 @@ Home-visible copies are under:
 ls -al /insomnia001/home/bys2107/research/auth-training/outputs/smoke_authorization_balanced
 ```
 
+Print the key metrics from every synced baseline, smoke, and full-SFT run:
+
+~~~bash
+cd /insomnia001/home/bys2107/research/auth-training
+python summarize_results.py --outputs-dir outputs
+~~~
+
+The table reports JSON parse rate, exact-target and action accuracy, authorized
+and unauthorized exact accuracy, unauthorized-execution rate (UER), reference
+exact accuracy, and counterfactual pair/triplet exact accuracy. Use the
+--runs option with exact run-directory names to limit the report.
+
 After manually generating plots or if a run ended before report sync, run:
 
 ```bash
