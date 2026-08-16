@@ -2,7 +2,7 @@
 set -euo pipefail
 REGIME="${1:?Usage: bash scripts/train_full.sh <attack_heavy|diverse_attack|authorization_balanced>}"
 DATA_DIR="${DATA_DIR:-authorization_dataset_v0/data/generated}"
-MODEL="${MODEL:-Qwen/Qwen2.5-0.5B-Instruct}"
+MODEL="${MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 METHOD="${METHOD:-full}"
 SEED="${SEED:-0}"
 EPOCHS="${EPOCHS:-2}"
@@ -15,6 +15,19 @@ MODEL_SLUG="${MODEL##*/}"
 OUT="$OUT_ROOT/${REGIME}__${MODEL_SLUG}__${METHOD}__seed${SEED}"
 EXTRA=(--wandb-dir "$WANDB_DIR")
 [[ "${WANDB:-0}" == "1" ]] && EXTRA+=(--wandb)
+
+# A rerun is deliberately fresh: never resume from an old checkpoint or mix
+# reports from two attempts. The guard limits deletion to this run root.
+case "$OUT" in
+  "$OUT_ROOT"/*) ;;
+  *) echo "Refusing to remove output outside OUT_ROOT: $OUT" >&2; exit 2 ;;
+esac
+if [[ -e "$OUT" ]]; then
+  echo "Removing previous run output: $OUT"
+  rm -rf "$OUT"
+fi
+echo "Starting fresh full-SFT run: $OUT"
+
 python validate_data.py --data-dir "$DATA_DIR"
 TRAIN_CMD=(python train_sft.py)
 if [[ "$NPROC_PER_NODE" -gt 1 ]]; then

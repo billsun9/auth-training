@@ -45,9 +45,9 @@ python -m pip install -r requirements.txt
 python validate_data.py
 ```
 
-The first smoke or training run downloads the Qwen2.5-0.5B-Instruct tokenizer
-and model into the configured local Hugging Face cache. Qwen2.5-0.5B-Instruct
-is the default model and does not require a private repository credential.
+The first smoke or training run downloads its tokenizer and model into the
+configured local Hugging Face cache. The smoke test uses Qwen2.5-0.5B-Instruct;
+the full baseline and initial comparison default to Qwen2.5-1.5B-Instruct.
 On the cluster, the copy helper below puts this cache on `/local`; do not run
 the experiment from the home filesystem.
 
@@ -83,8 +83,11 @@ frequently written artifacts stay under:
 ```
 
 The source checkout and its JSONL data are copied to local storage as well, so
-training data reads and all experiment writes happen under `/local`. Previous
-local artifacts are preserved because the helper does not use `rsync --delete`.
+training data reads and all experiment writes happen under `/local`. The helper
+does not use `rsync --delete`, so unrelated local artifacts and the Hugging
+Face cache are preserved. Each baseline or full-SFT script deliberately removes
+its own exact output directory before starting, so repeating the same model,
+regime, method, and seed is a fresh run rather than a resume.
 At the end of each run, it copies only small reports (PNGs, JSON metrics, JSONL
 predictions/logs) back to `auth-training/outputs/` in the home checkout. Model
 weights, checkpoints, optimizer state, and Hugging Face cache remain local.
@@ -99,7 +102,7 @@ The helper profiles are:
 | Profile | Action |
 |---|---|
 | `smoke` | 16-example LoRA plumbing test, 2 optimizer steps, all five eval splits with 8 examples each |
-| `baseline` | Frozen Qwen2.5-0.5B-Instruct greedy evaluation on all five shared splits |
+| `baseline` | Frozen Qwen2.5-1.5B-Instruct greedy evaluation on all five shared splits |
 | `initial` | Baseline, then identical full-SFT runs for `attack_heavy` and `authorization_balanced` |
 | `attack_heavy` | One full-SFT run plus evaluation |
 | `authorization_balanced` | One full-SFT run plus evaluation |
@@ -143,10 +146,12 @@ The initial meaningful comparison is frozen baseline plus identical full-SFT
 runs on `attack_heavy` and `authorization_balanced`:
 
 ```bash
+MODEL=Qwen/Qwen2.5-1.5B-Instruct \
+NPROC_PER_NODE=1 \
 bash auth-training/copy_helper.sh initial
 ```
 
-This uses Qwen2.5-0.5B-Instruct, full-parameter SFT, BF16, one GPU by default,
+This uses Qwen2.5-1.5B-Instruct, full-parameter SFT, BF16, one GPU by default,
 per-device batch size 2, gradient accumulation 4, nominal global batch size
 8, two epochs, learning rate `2e-5`, gradient checkpointing, and greedy eval
 on the same five shared files. Set `NPROC_PER_NODE=2` when a two-GPU
@@ -162,18 +167,18 @@ Results are under:
 
 ```text
 /local/bys2107/research/auth-training/artifacts/runs/
-  baseline__Qwen2.5-0.5B-Instruct/
-  attack_heavy__Qwen2.5-0.5B-Instruct__full__seed0/
-  authorization_balanced__Qwen2.5-0.5B-Instruct__full__seed0/
+  baseline__Qwen2.5-1.5B-Instruct/
+  attack_heavy__Qwen2.5-1.5B-Instruct__full__seed0/
+  authorization_balanced__Qwen2.5-1.5B-Instruct__full__seed0/
 ```
 
 Inspect the final summaries:
 
 ```bash
 ROOT=/local/bys2107/research/auth-training/artifacts/runs
-cat "$ROOT/baseline__Qwen2.5-0.5B-Instruct/eval_summary.json"
-cat "$ROOT/attack_heavy__Qwen2.5-0.5B-Instruct__full__seed0/eval_final/eval_summary.json"
-cat "$ROOT/authorization_balanced__Qwen2.5-0.5B-Instruct__full__seed0/eval_final/eval_summary.json"
+cat "$ROOT/baseline__Qwen2.5-1.5B-Instruct/eval_summary.json"
+cat "$ROOT/attack_heavy__Qwen2.5-1.5B-Instruct__full__seed0/eval_final/eval_summary.json"
+cat "$ROOT/authorization_balanced__Qwen2.5-1.5B-Instruct__full__seed0/eval_final/eval_summary.json"
 ```
 
 Per-split metrics include JSON parse rate, exact structured-target accuracy,
@@ -185,7 +190,7 @@ For checkpoint learning curves:
 
 ```bash
 python evaluate_checkpoints.py \
-  --run-dir "$ROOT/authorization_balanced__Qwen2.5-0.5B-Instruct__full__seed0" \
+  --run-dir "$ROOT/authorization_balanced__Qwen2.5-1.5B-Instruct__full__seed0" \
   --data-dir /local/bys2107/research/auth-training/authorization_dataset_v0/data/generated \
   --hf-cache-dir /local/bys2107/research/auth-training/artifacts/huggingface
 ```
@@ -198,7 +203,7 @@ and does not require a W&B account or network access. Install the added
 run it from the local node copy after a smoke or training run:
 
 ```bash
-RUN=/local/bys2107/research/auth-training/artifacts/runs/authorization_balanced__Qwen2.5-0.5B-Instruct__full__seed0
+RUN=/local/bys2107/research/auth-training/artifacts/runs/authorization_balanced__Qwen2.5-1.5B-Instruct__full__seed0
 python plot_results.py --run-dir "$RUN"
 ```
 
