@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-REGIME="${1:?Usage: bash scripts/train_full.sh <attack_heavy|diverse_attack|authorization_balanced>}"
+REGIME="${1:?Usage: bash scripts/train_full.sh <capability_only|attack_heavy|diverse_attack|authorization_balanced>}"
 DATA_DIR="${DATA_DIR:-authorization_dataset_v0/data/generated}"
 MODEL="${MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 METHOD="${METHOD:-full}"

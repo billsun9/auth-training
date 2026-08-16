@@ -13,7 +13,7 @@ from .factors import (
 )
 from .templates import (
     MECHANISM_WRAPPERS, paired_policy_request, render_instruction,
-    reference_policy_request, render_source_block, user_request,
+    policy_ood_request, reference_policy_request, render_source_block, user_request,
 )
 
 BENIGN_FRAMINGS = [
@@ -295,6 +295,10 @@ class AuthorizationDatasetGenerator:
                 mechanism = self.rng.choice(TRAIN_MECHANISMS)
                 style = self.rng.choice(STYLES)
                 lexical_family = self.rng.choice(TRAIN_LEXICAL_FAMILIES)
+            elif split in {"auth_recombination_natural", "authorization_policy_ood"}:
+                mechanism = self.rng.choice(TRAIN_MECHANISMS)
+                style = self.rng.choice(STYLES)
+                lexical_family = self.rng.choice(TRAIN_LEXICAL_FAMILIES)
             else:
                 raise ValueError(split)
 
@@ -322,7 +326,10 @@ class AuthorizationDatasetGenerator:
             factors["args"], factors["fact"],
         ])
 
-    def _make_example(self, regime, split, factors, authorized, triplet_id=None, triplet_role=None):
+    def _make_example(
+        self, regime, split, factors, authorized, triplet_id=None, triplet_role=None,
+        authorization_expression="ordinary_user_request",
+    ):
         source = factors["source"]
         domain = factors["domain"]
         action = factors["action"]
@@ -340,10 +347,12 @@ class AuthorizationDatasetGenerator:
         )
         if triplet_role == "reference":
             user = reference_policy_request(source, action, args)
-        elif triplet_id is not None:
+        elif authorization_expression == "paired_policy" and triplet_id is not None:
             user = paired_policy_request(source, authorized, factors["policy_template_family"])
+        elif authorization_expression == "policy_ood":
+            user = policy_ood_request(source, authorized, action, args)
         else:
-            user = user_request(source, authorized, action, args, recombination=(split == "auth_recombination"))
+            user = user_request(source, authorized, action, args)
         source_block = render_source_block(source, instruction, fact, record_id=triplet_id)
 
         prompt = (
@@ -364,6 +373,8 @@ class AuthorizationDatasetGenerator:
             mechanism_variant=mechanism_variant,
             instruction_template_id=f"{lexical_family}:{style}:{mechanism}:{mechanism_variant}",
         )
+        if split in {"auth_recombination_natural", "authorization_policy_ood"}:
+            meta["authorization_expression_family"] = authorization_expression
         if triplet_id is not None:
             # Keep the prior key so pair-based analysis can use the authorized
             # and unauthorized members; new consumers should use triplet_id.
@@ -395,7 +406,9 @@ class AuthorizationDatasetGenerator:
         factors = self._sample_factors(regime, split)
         return self._make_example(regime, split, factors, factors["authorized"])
 
-    def _generate_triplets(self, regime, split, n, source_actions=None):
+    def _generate_triplets(
+        self, regime, split, n, source_actions=None, authorization_expression="paired_policy",
+    ):
         """Generate reference/authorized/unauthorized triplets."""
         out = []
         seen = set()
@@ -407,9 +420,15 @@ class AuthorizationDatasetGenerator:
                 index += 1
             factors = self._sample_pair_factors(regime, split, source_action)
             triplet_id = self._triplet_id(regime, split, factors)
-            reference = self._make_example(regime, split, factors, False, triplet_id, "reference")
-            unauthorized = self._make_example(regime, split, factors, False, triplet_id, "unauthorized")
-            authorized = self._make_example(regime, split, factors, True, triplet_id, "authorized")
+            reference = self._make_example(
+                regime, split, factors, False, triplet_id, "reference", authorization_expression,
+            )
+            unauthorized = self._make_example(
+                regime, split, factors, False, triplet_id, "unauthorized", authorization_expression,
+            )
+            authorized = self._make_example(
+                regime, split, factors, True, triplet_id, "authorized", authorization_expression,
+            )
             triplet = [reference, unauthorized, authorized]
             if not ({example.id for example in triplet} & seen):
                 out.extend(triplet)
@@ -418,12 +437,23 @@ class AuthorizationDatasetGenerator:
         while len(out) < n:
             # Non-multiple-of-three requests retain the requested row count;
             # standard sampling supplies the unavoidable ungrouped remainder.
-            if split == "auth_recombination":
+            if source_actions:
                 source_action = source_actions[index % len(source_actions)]
                 index += 1
                 factors = self._sample_pair_factors(regime, split, source_action)
-                out.append(self._make_example(regime, split, factors, False))
+                out.append(self._make_example(
+                    regime, split, factors, False,
+                    authorization_expression=authorization_expression,
+                ))
+            elif split == "authorization_policy_ood":
+                factors = self._sample_pair_factors(regime, split)
+                out.append(self._make_example(
+                    regime, split, factors, False,
+                    authorization_expression=authorization_expression,
+                ))
             else:
+                # Preserve established sampling for ordinary splits; only the
+                # preview remainder is ungrouped.
                 out.append(self.generate_example(regime, "train"))
         return out
 
@@ -472,6 +502,16 @@ class AuthorizationDatasetGenerator:
         if split == "auth_recombination":
             return self._generate_triplets(
                 regime, split, n, source_actions=RECOMBINATION_HOLDOUT_SOURCE_ACTIONS,
+                authorization_expression="paired_policy",
+            )
+        if split == "auth_recombination_natural":
+            return self._generate_triplets(
+                regime, split, n, source_actions=RECOMBINATION_HOLDOUT_SOURCE_ACTIONS,
+                authorization_expression="ordinary_user_request",
+            )
+        if split == "authorization_policy_ood":
+            return self._generate_triplets(
+                regime, split, n, authorization_expression="policy_ood",
             )
         out = []
         seen = set()

@@ -71,7 +71,7 @@ def _checkpoint_dirs(run_dir: Path):
 
 
 def plot_checkpoint_eval_progress(run_dir: str | Path, output_dir: str | Path | None = None) -> Path:
-    """Plot exact/action/unauthorized-execution metrics across checkpoint evals."""
+    """Plot exact/action/authorized/unauthorized-execution metrics across checkpoints."""
     run_dir = Path(run_dir)
     output_dir = Path(output_dir or run_dir / "plots")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -80,12 +80,13 @@ def plot_checkpoint_eval_progress(run_dir: str | Path, output_dir: str | Path | 
         raise FileNotFoundError(f"No checkpoint evaluations under {run_dir / 'checkpoint_evals'}")
     splits = sorted(p.stem.removeprefix("metrics_") for p in checkpoints[0][1].glob("metrics_*.json"))
     plt = _plt()
-    fig, axes = plt.subplots(3, 1, figsize=(11, 12), sharex=True)
+    fig, axes = plt.subplots(4, 1, figsize=(11, 15), sharex=True)
     x = list(range(len(checkpoints)))
     labels = [p.name for _, p in checkpoints]
     metrics = (
         ("exact_target_accuracy", "exact target accuracy"),
         ("action_accuracy", "action accuracy"),
+        ("authorized_execution_rate", "authorized execution rate"),
         ("unauthorized_execution_rate", "unauthorized execution rate"),
     )
     for axis, (field, title) in zip(axes, metrics):
@@ -107,7 +108,7 @@ def plot_checkpoint_eval_progress(run_dir: str | Path, output_dir: str | Path | 
 
 
 def plot_eval_summary(eval_dir: str | Path, output_dir: str | Path | None = None) -> Path:
-    """Plot final exact/action/unauthorized-execution metrics by eval split."""
+    """Plot final exact/action/authorized/unauthorized-execution metrics by eval split."""
     eval_dir = Path(eval_dir)
     output_dir = Path(output_dir or eval_dir / "plots")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -116,10 +117,11 @@ def plot_eval_summary(eval_dir: str | Path, output_dir: str | Path | None = None
         raise FileNotFoundError(f"No metrics_*.json files under {eval_dir}")
     rows = [(p.stem.removeprefix("metrics_"), _load_json(p)) for p in files]
     plt = _plt()
-    fig, axes = plt.subplots(1, 3, figsize=(14, 5), sharey=True)
+    fig, axes = plt.subplots(1, 4, figsize=(18, 5), sharey=True)
     metrics = (
         ("exact_target_accuracy", "exact target"),
         ("action_accuracy", "action"),
+        ("authorized_execution_rate", "authorized execution"),
         ("unauthorized_execution_rate", "unauthorized execution"),
     )
     x = list(range(len(rows)))

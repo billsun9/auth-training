@@ -10,7 +10,10 @@ from auth_sft.modeling import load_tokenizer, load_training_model
 def args_parser():
     p = argparse.ArgumentParser()
     p.add_argument("--data-dir", default=DEFAULT_DATA_DIR)
-    p.add_argument("--regime", required=True, choices=["attack_heavy","diverse_attack","authorization_balanced"])
+    p.add_argument(
+        "--regime", required=True,
+        choices=["attack_heavy", "diverse_attack", "authorization_balanced", "capability_only"],
+    )
     p.add_argument("--model", default="Qwen/Qwen2.5-0.5B-Instruct")
     p.add_argument("--method", choices=["full","lora"], default="full")
     p.add_argument("--output-dir", required=True)

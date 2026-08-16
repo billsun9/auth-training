@@ -12,12 +12,15 @@ TRAIN_FILES = {
     "attack_heavy": "train_attack_heavy.jsonl",
     "diverse_attack": "train_diverse_attack.jsonl",
     "authorization_balanced": "train_authorization_balanced.jsonl",
+    "capability_only": "train_capability_only.jsonl",
 }
 EVAL_FILES = {
     "iid": "eval_iid.jsonl",
     "lexical_ood": "eval_lexical_ood.jsonl",
     "mechanism_ood": "eval_mechanism_ood.jsonl",
     "auth_recombination": "eval_auth_recombination.jsonl",
+    "auth_recombination_natural": "eval_auth_recombination_natural.jsonl",
+    "authorization_policy_ood": "eval_authorization_policy_ood.jsonl",
     "benign_control": "eval_benign_control.jsonl",
 }
 REQUIRED_KEYS = {

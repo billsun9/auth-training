@@ -122,6 +122,35 @@ class TestGenerator(unittest.TestCase):
             self.assertIn((source, action, False), recombination_tuples)
             self.assertIn((source, action, True), recombination_tuples)
 
+    def test_natural_recombination_uses_held_out_pairs_without_policy_templates(self):
+        rows = AuthorizationDatasetGenerator(seed=15).generate(
+            "shared_eval", "auth_recombination_natural", 200,
+        )
+        tuples = {(row.source, row.candidate_action, row.authorized) for row in rows}
+        self.assertEqual(tuples, RECOMBINATION_HOLDOUTS)
+        for row in rows:
+            self.assertEqual(
+                row.metadata["authorization_expression_family"],
+                "ordinary_user_request",
+            )
+            self.assertNotIn("AUTHORIZATION POLICY:", row.prompt)
+            self.assertNotIn("DELEGATION RECORD:", row.prompt)
+            self.assertNotIn("not granted", row.prompt)
+
+    def test_policy_ood_uses_unseen_authorization_language(self):
+        rows = AuthorizationDatasetGenerator(seed=16).generate(
+            "shared_eval", "authorization_policy_ood", 200,
+        )
+        self.assertTrue(all(
+            row.metadata["authorization_expression_family"] == "policy_ood"
+            for row in rows
+        ))
+        for row in rows:
+            self.assertNotIn("granted", row.prompt)
+            self.assertNotIn("not granted", row.prompt)
+            self.assertNotIn("AUTHORIZATION POLICY:", row.prompt)
+            self.assertNotIn("DELEGATION RECORD:", row.prompt)
+
     def test_style_is_observable_under_each_mechanism(self):
         args = {"file": "notes.txt", "recipient": "alice@example.com"}
         for mechanism in ["direct", "role_spoof", "fake_reasoning"]:
@@ -136,7 +165,7 @@ class TestGenerator(unittest.TestCase):
 import json
 from authdata.generator import AuthorizationDatasetGenerator
 g = AuthorizationDatasetGenerator(seed=0)
-for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_ood', 20), ('auth_recombination', 20), ('benign_control', 20)]:
+for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_ood', 20), ('auth_recombination', 20), ('auth_recombination_natural', 20), ('authorization_policy_ood', 20), ('benign_control', 20)]:
     for row in g.generate('authorization_balanced', split, n):
         print(json.dumps(row.to_dict(), ensure_ascii=False))
 """
@@ -175,13 +204,15 @@ for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_o
                 {path.name for path in all_out.iterdir()},
                 {
                     "train_attack_heavy.jsonl", "train_diverse_attack.jsonl",
-                    "train_authorization_balanced.jsonl", "eval_iid.jsonl",
+                    "train_authorization_balanced.jsonl", "train_capability_only.jsonl", "eval_iid.jsonl",
                     "eval_lexical_ood.jsonl", "eval_mechanism_ood.jsonl",
-                    "eval_auth_recombination.jsonl", "eval_benign_control.jsonl",
+                    "eval_auth_recombination.jsonl", "eval_auth_recombination_natural.jsonl",
+                    "eval_authorization_policy_ood.jsonl", "eval_benign_control.jsonl",
                 },
             )
             for split in [
-                "iid", "lexical_ood", "mechanism_ood", "auth_recombination", "benign_control",
+                "iid", "lexical_ood", "mechanism_ood", "auth_recombination",
+                "auth_recombination_natural", "authorization_policy_ood", "benign_control",
             ]:
                 self.assertEqual(
                     (all_out / f"eval_{split}.jsonl").read_bytes(),
@@ -189,13 +220,16 @@ for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_o
                 )
             all_rows = {
                 regime: [json.loads(line) for line in (all_out / f"train_{regime}.jsonl").read_text().splitlines()]
-                for regime in ["attack_heavy", "diverse_attack", "authorization_balanced"]
+                for regime in ["attack_heavy", "diverse_attack", "authorization_balanced", "capability_only"]
             }
             shared = [row for row in all_rows["attack_heavy"] if row["regime"] == "shared_capability"]
             self.assertEqual(len(shared), 5)
             for rows in all_rows.values():
                 self.assertEqual(shared, [row for row in rows if row["regime"] == "shared_capability"])
-            for split in ["iid", "lexical_ood", "mechanism_ood", "auth_recombination", "benign_control"]:
+            for split in [
+                "iid", "lexical_ood", "mechanism_ood", "auth_recombination",
+                "auth_recombination_natural", "authorization_policy_ood", "benign_control",
+            ]:
                 rows = [json.loads(line) for line in (all_out / f"eval_{split}.jsonl").read_text().splitlines()]
                 has_closed_domain = any(row["metadata"].get("task_family") == "closed_domain" for row in rows)
                 self.assertEqual(has_closed_domain, split == "mechanism_ood")
@@ -215,6 +249,7 @@ for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_o
                 {
                     "train_20.jsonl", "iid_10.jsonl", "lexical_ood_10.jsonl",
                     "mechanism_ood_10.jsonl", "auth_recombination_10.jsonl",
+                    "auth_recombination_natural_10.jsonl", "authorization_policy_ood_10.jsonl",
                     "benign_control_10.jsonl",
                 },
             )

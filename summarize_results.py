@@ -6,13 +6,6 @@ import json
 from pathlib import Path
 
 
-SUMMARY_CANDIDATES = (
-    ("eval_final", "eval_summary.json"),
-    ("eval_smoke", "eval_summary.json"),
-    ("", "eval_summary.json"),
-)
-
-
 def load_synced_summaries(outputs_dir: str | Path, run_names: set[str] | None = None):
     """Return (run_name, evaluation_kind, summary) triples from synced outputs."""
     root = Path(outputs_dir)
@@ -23,12 +16,12 @@ def load_synced_summaries(outputs_dir: str | Path, run_names: set[str] | None = 
     for run_dir in sorted(path for path in root.iterdir() if path.is_dir()):
         if run_names and run_dir.name not in run_names:
             continue
-        for parent, filename in SUMMARY_CANDIDATES:
-            summary_path = run_dir / parent / filename if parent else run_dir / filename
+        candidates = [(path.name, path / "eval_summary.json") for path in sorted(run_dir.glob("eval_*"))]
+        candidates.append(("baseline", run_dir / "eval_summary.json"))
+        for evaluation_kind, summary_path in candidates:
             if summary_path.is_file():
                 with summary_path.open(encoding="utf-8") as handle:
-                    found.append((run_dir.name, parent or "baseline", json.load(handle)))
-                break
+                    found.append((run_dir.name, evaluation_kind, json.load(handle)))
     if not found:
         requested = f" for {sorted(run_names)}" if run_names else ""
         raise FileNotFoundError(f"No synced eval_summary.json files found under {root}{requested}")
@@ -42,30 +35,45 @@ def _rate(value):
 def _nested_rate(summary, parent, field):
     return _rate(summary.get(parent, {}).get(field))
 
+def _rate_with_fallback(summary, field, fallback=None):
+    value = summary.get(field)
+    if value is None and fallback:
+        value = summary.get(fallback)
+    return _rate(value)
+
 
 def render_summary_table(records) -> str:
     """Render the primary outcome and authorization metrics for each synced run."""
     lines = []
     header = (
-        f"{'split':<20} {'n':>4} {'json':>7} {'exact':>7} {'action':>7} "
-        f"{'auth-ex':>8} {'unauth-ex':>10} {'UER':>7} {'ref-ex':>7} "
+        f"{'split':<28} {'n':>4} {'json':>7} {'exact':>7} {'action':>7} "
+        f"{'AER':>7} {'UER':>7} {'auth-ex':>8} {'unauth-ex':>10} {'ref-ex':>7} "
         f"{'pair-ex':>8} {'triplet-ex':>11}"
     )
     for run_name, evaluation_kind, summary in records:
         lines.extend(("", f"{run_name} [{evaluation_kind}]", header))
         for split, metrics in summary.items():
             lines.append(
-                f"{split:<20} {metrics.get('n', 0):>4} "
+                f"{split:<28} {metrics.get('n', 0):>4} "
                 f"{_rate(metrics.get('json_parse_rate')):>7} "
                 f"{_rate(metrics.get('exact_target_accuracy')):>7} "
                 f"{_rate(metrics.get('action_accuracy')):>7} "
+                f"{_rate_with_fallback(metrics, 'authorized_execution_rate', 'authorized_action_accuracy'):>7} "
+                f"{_rate(metrics.get('unauthorized_execution_rate')):>7} "
                 f"{_rate(metrics.get('authorized_exact_target_accuracy')):>8} "
                 f"{_rate(metrics.get('unauthorized_exact_target_accuracy')):>10} "
-                f"{_rate(metrics.get('unauthorized_execution_rate')):>7} "
                 f"{_rate(metrics.get('reference_exact_target_accuracy')):>7} "
                 f"{_nested_rate(metrics, 'counterfactual_pairs', 'pair_exact_accuracy'):>8} "
                 f"{_nested_rate(metrics, 'counterfactual_triplets', 'triplet_exact_accuracy'):>11}"
             )
+            if split == "benign_control":
+                lines.append(
+                    "  benign: "
+                    f"JSON valid={_rate(metrics.get('json_parse_rate'))}, "
+                    f"answer action={_rate_with_fallback(metrics, 'benign_answer_action_rate', 'action_accuracy')}, "
+                    f"unexpected tool execution={_rate(metrics.get('benign_unexpected_tool_execution_rate'))}, "
+                    f"exact content={_rate(metrics.get('exact_target_accuracy'))}"
+                )
     return "\n".join(lines).lstrip() + "\n"
 
 

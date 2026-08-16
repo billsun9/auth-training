@@ -6,8 +6,12 @@ import shutil
 from pathlib import Path
 from authdata.generator import AuthorizationDatasetGenerator, write_jsonl
 
-REGIMES = ["attack_heavy", "diverse_attack", "authorization_balanced"]
-EVAL_SPLITS = ["iid", "lexical_ood", "mechanism_ood", "auth_recombination", "benign_control"]
+HIERARCHY_REGIMES = ["attack_heavy", "diverse_attack", "authorization_balanced"]
+REGIMES = [*HIERARCHY_REGIMES, "capability_only"]
+EVAL_SPLITS = [
+    "iid", "lexical_ood", "mechanism_ood", "auth_recombination",
+    "benign_control", "auth_recombination_natural", "authorization_policy_ood",
+]
 SHARED_EVAL_REGIME = "shared_eval"
 DATA_ROOT = Path(__file__).resolve().parent / "data"
 
@@ -103,10 +107,15 @@ def main():
     for regime in regimes:
         # A fresh RNG makes each train set depend only on its regime and the
         # requested seed, never on which other regimes were generated first.
-        train_gen = AuthorizationDatasetGenerator(seed=args.seed)
-        rows = train_gen.generate(regime, "train", args.n_train) + capability_rows
+        if regime == "capability_only":
+            rows = list(capability_rows)
+            description = f"{args.n_capability} shared capability only"
+        else:
+            train_gen = AuthorizationDatasetGenerator(seed=args.seed)
+            rows = train_gen.generate(regime, "train", args.n_train) + capability_rows
+            description = f"{args.n_train} hierarchy + {args.n_capability} shared capability"
         write_jsonl(out / f"train_{regime}.jsonl", rows)
-        print(f"generated train_{regime}: {len(rows)} ({args.n_train} hierarchy + {args.n_capability} shared capability)")
+        print(f"generated train_{regime}: {len(rows)} ({description})")
 
     # Evaluation examples are generated once from a dedicated stream and are
     # rejected/regenerated as a whole if finite-space sampling creates an

@@ -10,7 +10,7 @@ and a JSON-object target. Training serializes:
 
 Only target and EOS tokens contribute to cross-entropy loss. Prompt and padding
 labels are `-100`. Evaluation uses the same prompt serializer, greedy JSON
-generation, strict whole-completion JSON-object parsing, and shared five-way
+generation, strict whole-completion JSON-object parsing, and shared seven-way
 evaluation suite.
 
 ## Repository data
@@ -22,17 +22,26 @@ authorization_dataset_v0/data/generated/
   train_attack_heavy.jsonl
   train_diverse_attack.jsonl
   train_authorization_balanced.jsonl
+  train_capability_only.jsonl
   eval_iid.jsonl
   eval_lexical_ood.jsonl
   eval_mechanism_ood.jsonl
   eval_auth_recombination.jsonl
+  eval_auth_recombination_natural.jsonl
+  eval_authorization_policy_ood.jsonl
   eval_benign_control.jsonl
 ```
 
-The three training files are separate experimental regimes. Each has 3,000
+The four training files are separate experimental conditions. The three
+authorization regimes each have 3,000
 regime-specific hierarchy rows plus 1,000 byte-identical `shared_capability`
-rehearsal rows by default. The five eval files are shared across regimes;
-`mechanism_ood` includes a held-out closed-domain injected-data subset.
+rehearsal rows by default. `capability_only` contains those same 1,000
+capability rows and no authorization/prompt-injection examples. The seven eval
+files are shared across regimes; `mechanism_ood` includes a held-out
+closed-domain injected-data subset. `auth_recombination_natural` keeps the
+held-out source × action combinations but uses ordinary user-request wording,
+while `authorization_policy_ood` uses authorization phrasings absent from all
+training conditions.
 `validate_data.py` checks
 schema, canonical layout, split/regime labels, duplicate IDs, and exact
 prompt+target train/eval leakage.
@@ -106,10 +115,12 @@ The helper profiles are:
 
 | Profile | Action |
 |---|---|
-| `smoke` | 16-example LoRA plumbing test, 2 optimizer steps, all five eval splits with 8 examples each |
-| `baseline` | Frozen Qwen2.5-1.5B-Instruct greedy evaluation on all five shared splits |
-| `initial` | Baseline, then identical full-SFT runs for `attack_heavy` and `authorization_balanced` |
+| `smoke` | 16-example LoRA plumbing test, 2 optimizer steps, all seven eval splits with 8 examples each |
+| `baseline` | Frozen Qwen2.5-1.5B-Instruct greedy evaluation on all seven shared splits |
+| `initial` | Baseline, then identical full-SFT runs for `capability_only`, `attack_heavy`, `diverse_attack`, and `authorization_balanced` |
+| `capability_only` | One shared-capability-only SFT control plus evaluation |
 | `attack_heavy` | One full-SFT run plus evaluation |
+| `diverse_attack` | One full-SFT run plus evaluation |
 | `authorization_balanced` | One full-SFT run plus evaluation |
 
 ## Smoke test and results
@@ -130,7 +141,7 @@ cat "$SMOKE/eval_smoke/metrics_iid.json"
 less "$SMOKE/eval_smoke/predictions_iid.jsonl"
 ```
 
-Check that all five `metrics_*.json` and `predictions_*.jsonl` files exist and
+Check that all seven `metrics_*.json` and `predictions_*.jsonl` files exist and
 that the run reaches `final/`.
 
 Home-visible copies are under:
@@ -146,10 +157,12 @@ cd /insomnia001/home/bys2107/research/auth-training
 python summarize_results.py --outputs-dir outputs
 ~~~
 
-The table reports JSON parse rate, exact-target and action accuracy, authorized
-and unauthorized exact accuracy, unauthorized-execution rate (UER), reference
-exact accuracy, and counterfactual pair/triplet exact accuracy. Use the
---runs option with exact run-directory names to limit the report.
+The table reports JSON parse rate, exact-target and action accuracy,
+authorized-execution rate (AER), unauthorized-execution rate (UER), authorized
+and unauthorized exact accuracy, reference accuracy, and counterfactual
+pair/triplet exact accuracy. For `benign_control` it also prints answer-action
+rate and unexpected-tool-execution rate. Use the `--runs` option with exact
+run-directory names to limit the report.
 
 After manually generating plots or if a run ended before report sync, run:
 
@@ -160,7 +173,8 @@ bash auth-training/copy_helper.sh sync
 ## Initial experiment and results
 
 The initial meaningful comparison is frozen baseline plus identical full-SFT
-runs on `attack_heavy`, `diverse_attack`, and `authorization_balanced`:
+runs on `capability_only`, `attack_heavy`, `diverse_attack`, and
+`authorization_balanced`:
 
 ```bash
 MODEL=Qwen/Qwen2.5-1.5B-Instruct \
@@ -171,7 +185,7 @@ bash auth-training/copy_helper.sh initial
 This uses Qwen2.5-1.5B-Instruct, full-parameter SFT, BF16, one GPU by default,
 per-device batch size 2, gradient accumulation 4, nominal global batch size
 8, two epochs, learning rate `2e-5`, gradient checkpointing, and greedy eval
-on the same five shared files. Set `NPROC_PER_NODE=2` when a two-GPU
+on the same seven shared files. Set `NPROC_PER_NODE=2` when a two-GPU
 allocation is available; compared regimes must use the same setting.
 
 Each full-SFT regime holds out a deterministic 10% validation split from its
@@ -179,13 +193,14 @@ own training rows (counterfactual triplets stay together, and shared capability
 rows receive identical train/validation membership across regimes). Validation uses the
 same completion-only loss, runs every 20 steps, restores the best
 `eval_loss` checkpoint, and stops after five validation evaluations without
-improvement. The shared five-split suite remains untouched for final reporting.
+improvement. The shared seven-split suite remains untouched for final reporting.
 
 Results are under:
 
 ```text
 /local/bys2107/research/auth-training/artifacts/runs/
   baseline__Qwen2.5-1.5B-Instruct/
+  capability_only__Qwen2.5-1.5B-Instruct__full__seed0/
   attack_heavy__Qwen2.5-1.5B-Instruct__full__seed0/
   diverse_attack__Qwen2.5-1.5B-Instruct__full__seed0/
   authorization_balanced__Qwen2.5-1.5B-Instruct__full__seed0/
@@ -196,15 +211,32 @@ Inspect the final summaries:
 ```bash
 ROOT=/local/bys2107/research/auth-training/artifacts/runs
 cat "$ROOT/baseline__Qwen2.5-1.5B-Instruct/eval_summary.json"
+cat "$ROOT/capability_only__Qwen2.5-1.5B-Instruct__full__seed0/eval_final/eval_summary.json"
 cat "$ROOT/attack_heavy__Qwen2.5-1.5B-Instruct__full__seed0/eval_final/eval_summary.json"
 cat "$ROOT/diverse_attack__Qwen2.5-1.5B-Instruct__full__seed0/eval_final/eval_summary.json"
 cat "$ROOT/authorization_balanced__Qwen2.5-1.5B-Instruct__full__seed0/eval_final/eval_summary.json"
 ```
 
 Per-split metrics include JSON parse rate, exact structured-target accuracy,
-action accuracy, authorized and unauthorized exact/action accuracy,
-unauthorized-execution rate, reference accuracy, counterfactual pair/triplet accuracy, and factor
-breakdowns. Predictions are in the corresponding `predictions_<split>.jsonl`.
+action accuracy, authorized and unauthorized exact/action accuracy, authorized
+execution rate (AER), unauthorized-execution rate (UER), reference accuracy,
+counterfactual pair/triplet accuracy, and factor breakdowns. For
+`benign_control`, answer-action rate and unexpected-tool-execution rate are
+reported separately from exact answer content. Predictions are in the
+corresponding `predictions_<split>.jsonl`.
+
+Evaluate the two new generalization splits on the existing baseline and
+completed 1.5B checkpoints without retraining:
+
+```bash
+cd /insomnia001/home/bys2107/research
+MODEL=Qwen/Qwen2.5-1.5B-Instruct \
+  bash auth-training/copy_helper.sh generalization_eval
+```
+
+This writes `eval_generalization/` under each available run, then syncs the
+small reports home. Re-run `summarize_results.py --outputs-dir outputs` after
+sync to show both the final and generalization-only tables.
 
 By default, a successful run keeps only `final/`, the restored best-validation-loss
 model. Periodic checkpoints are model-only temporary files (no optimizer state)
@@ -244,7 +276,7 @@ It writes PNGs to `$RUN/plots/`:
 
 - `training_progress.png`: training loss, held-out validation loss (for full-SFT), learning rate, and gradient norm over optimizer steps;
 - `checkpoint_eval_progress.png`: exact-target accuracy, action accuracy, and unauthorized-execution rate across checkpoint evaluations and final;
-- `eval_summary.png`: final metrics across the five eval splits.
+- `eval_summary.png`: final metrics across all seven eval splits.
 
 Choose another output location with `--output-dir`. For the smoke run, use:
 
