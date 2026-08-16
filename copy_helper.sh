@@ -9,8 +9,8 @@ DST="$WORK_ROOT/auth-training"
 PROFILE="${1:-smoke}"
 
 case "$PROFILE" in
-  smoke|baseline|initial|attack_heavy|authorization_balanced|sync) ;;
-  *) echo "Usage: $0 {smoke|baseline|initial|attack_heavy|authorization_balanced|sync}" >&2; exit 2 ;;
+  smoke|baseline|initial|attack_heavy|diverse_attack|authorization_balanced|sync) ;;
+  *) echo "Usage: $0 {smoke|baseline|initial|attack_heavy|diverse_attack|authorization_balanced|sync}" >&2; exit 2 ;;
 esac
 
 ARTIFACT_ROOT="$DST/artifacts"
@@ -83,7 +83,7 @@ case "$PROFILE" in
     bash scripts/eval_baseline.sh
     bash scripts/run_full_matrix.sh
     ;;
-  attack_heavy|authorization_balanced) bash scripts/train_full.sh "$PROFILE" ;;
+  attack_heavy|diverse_attack|authorization_balanced) bash scripts/train_full.sh "$PROFILE" ;;
 esac
 
 sync_reports
