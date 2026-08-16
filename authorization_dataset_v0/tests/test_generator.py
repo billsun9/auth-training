@@ -180,6 +180,26 @@ for split, n in [('train', 100), ('iid', 20), ('lexical_ood', 20), ('mechanism_o
                     (one_out / f"eval_{split}.jsonl").read_bytes(),
                 )
 
+    def test_cli_replaces_preview_dataset(self):
+        project_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            preview_out = Path(temp_dir) / "preview"
+            preview_out.mkdir()
+            (preview_out / "stale.txt").write_text("stale", encoding="utf-8")
+            subprocess.run(
+                [sys.executable, "generate.py", "--preview", "--out", str(preview_out)],
+                cwd=project_root, check=True, capture_output=True,
+            )
+            self.assertEqual(
+                {path.name for path in preview_out.iterdir()},
+                {
+                    "train_20.jsonl", "iid_10.jsonl", "lexical_ood_10.jsonl",
+                    "mechanism_ood_10.jsonl", "auth_recombination_10.jsonl",
+                    "benign_control_10.jsonl",
+                },
+            )
+            self.assertEqual(len((preview_out / "train_20.jsonl").read_text().splitlines()), 20)
+
     def test_benign_control_supports_a_200_example_eval_split(self):
         rows = AuthorizationDatasetGenerator(seed=13).generate(
             "shared_eval", "benign_control", 200,

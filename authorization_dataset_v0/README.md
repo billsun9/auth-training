@@ -51,6 +51,13 @@ python generate.py \
   --seed 0
 ```
 
+Regenerate the small, tracked preview set (20 balanced-training examples and
+10 examples for each eval split). This intentionally replaces `data/preview/`:
+
+```bash
+python generate.py --preview --seed 0
+```
+
 Inspect:
 
 ```bash
