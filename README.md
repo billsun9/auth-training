@@ -194,7 +194,20 @@ action accuracy, authorized and unauthorized exact/action accuracy,
 unauthorized-execution rate, reference accuracy, counterfactual pair/triplet accuracy, and factor
 breakdowns. Predictions are in the corresponding `predictions_<split>.jsonl`.
 
-For checkpoint learning curves:
+By default, a successful run keeps only `final/`, the restored best-validation-loss
+model. Periodic checkpoints are model-only temporary files (no optimizer state)
+and are removed after that final export. This keeps each completed 1.5B full-SFT
+run to roughly one model copy instead of several optimizer-bearing copies.
+
+To retain periodic model-only checkpoints for external checkpoint learning curves,
+opt in before starting the run:
+
+```bash
+KEEP_CHECKPOINTS=1 SAVE_TOTAL_LIMIT=3 NPROC_PER_NODE=1 \
+  bash auth-training/copy_helper.sh authorization_balanced
+```
+
+Then evaluate the retained checkpoints:
 
 ```bash
 python evaluate_checkpoints.py \
@@ -250,10 +263,12 @@ The Python entry points expose equivalent `--output-dir` and
 ## Run artifacts
 
 Each training run writes `run_config.json`, training logs, trainer history,
-`train_metrics.json`, `data_split.json`, periodic checkpoints, and `final/`.
-Checkpoints include model weights, tokenizer files, optimizer, scheduler, RNG,
-and trainer state. Post-hoc checkpoint evaluation explicitly reuses the
-tokenizer from `final/`. Evaluation writes `eval_config.json`, per-split
+`train_metrics.json`, `data_split.json`, and `final/`. By default, periodic
+checkpoints are temporary model-only files and are pruned after `final/` is
+saved; this experiment intentionally does not support resume-from-checkpoint.
+Set `KEEP_CHECKPOINTS=1` to retain them for post-hoc checkpoint evaluation.
+Post-hoc checkpoint evaluation explicitly reuses the tokenizer from `final/`.
+Evaluation writes `eval_config.json`, per-split
 predictions and metrics, plus `eval_summary.json`.
 
 For full SFT, `final/` contains model weights. For LoRA, it contains adapter

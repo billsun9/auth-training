@@ -29,7 +29,7 @@ accelerate launch --config_file configs/accelerate_fsdp2_2gpu.yaml train_sft.py 
   --no-gradient-checkpointing \
   --logging-steps 5 \
   --save-steps 20 \
-  --save-total-limit 10 \
+  --save-total-limit 1 --save-only-model \
   --seed "$SEED"
 
 python evaluate.py \

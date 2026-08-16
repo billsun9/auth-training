@@ -4,7 +4,7 @@ from pathlib import Path
 import torch
 from transformers import EarlyStoppingCallback, Trainer, TrainingArguments, set_seed
 from auth_sft.data import DEFAULT_DATA_DIR, TRAIN_FILES, CompletionOnlyCollator, PromptCompletionDataset, canonical_data_paths, load_train_rows, split_train_validation_rows
-from auth_sft.logging_utils import JSONLLoggingCallback, sha256_file, write_json
+from auth_sft.logging_utils import JSONLLoggingCallback, prune_periodic_checkpoints, sha256_file, write_json
 from auth_sft.modeling import load_tokenizer, load_training_model
 
 def args_parser():
@@ -36,7 +36,12 @@ def args_parser():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--logging-steps", type=int, default=5)
     p.add_argument("--save-steps", type=int, default=20)
-    p.add_argument("--save-total-limit", type=int, default=3)
+    p.add_argument("--save-total-limit", type=int, default=1,
+                   help="Maximum temporary periodic checkpoints to retain during training")
+    p.add_argument("--save-only-model", action=argparse.BooleanOptionalAction, default=True,
+                   help="Do not save optimizer/scheduler state in periodic checkpoints (default: true)")
+    p.add_argument("--keep-checkpoints", action=argparse.BooleanOptionalAction, default=False,
+                   help="Keep periodic checkpoints after successful training (default: false)")
     p.add_argument("--wandb", action="store_true")
     p.add_argument("--wandb-project", default="auth-training")
     p.add_argument("--run-name")
@@ -89,6 +94,7 @@ def main():
         eval_steps=a.eval_steps if validation_ds else None,
         save_strategy="steps" if a.save_steps > 0 else "no",
         save_steps=max(1,a.save_steps), save_total_limit=a.save_total_limit,
+        save_only_model=a.save_only_model,
         load_best_model_at_end=bool(validation_ds),
         metric_for_best_model="eval_loss" if validation_ds else None,
         greater_is_better=False if validation_ds else None,
@@ -128,6 +134,11 @@ def main():
         "global_train_batch_size": a.per_device_train_batch_size * world_size * a.gradient_accumulation_steps,
         "resolved_warmup_steps": resolved_warmup_steps,
         "train_file_sha256": sha256_file(Path(a.data_dir) / TRAIN_FILES[a.regime]),
+        "checkpoint_policy": {
+            "save_only_model": a.save_only_model,
+            "keep_checkpoints_after_training": a.keep_checkpoints,
+            "temporary_checkpoint_limit": a.save_total_limit,
+        },
     })
     if trainer.is_world_process_zero():
         write_json(out/"run_config.json", cfg)
@@ -138,10 +149,19 @@ def main():
             "validation_ids": [row["id"] for row in validation_rows],
         })
     result = trainer.train()
-    trainer.save_state()
     final = out/"final"
-    trainer.save_model(str(final)); tok.save_pretrained(str(final))
+    trainer.save_model(str(final))
+    trainer.accelerator.wait_for_everyone()
     if trainer.is_world_process_zero():
+        # trainer.train() restores the best eval-loss model before returning.
+        # The final export is therefore the only model needed for inference.
+        best_checkpoint_before_pruning = trainer.state.best_model_checkpoint
+        tok.save_pretrained(str(final))
+        removed_checkpoints = []
+        if not a.keep_checkpoints:
+            removed_checkpoints = prune_periodic_checkpoints(out)
+            trainer.state.best_model_checkpoint = str(final)
+        trainer.save_state()
         write_json(out/"train_metrics.json", result.metrics)
         if validation_ds:
             write_json(out/"validation_metrics.json", trainer.evaluate())
@@ -149,9 +169,12 @@ def main():
             for item in trainer.state.log_history:
                 f.write(json.dumps(item,ensure_ascii=False)+"\n")
         write_json(final/"auth_training_metadata.json", {
-            "base_model":a.model,"method":a.method,"regime":a.regime,"seed":a.seed
+            "base_model":a.model,"method":a.method,"regime":a.regime,"seed":a.seed,
+            "best_checkpoint_before_pruning": best_checkpoint_before_pruning,
+            "removed_periodic_checkpoints": removed_checkpoints,
         })
         print(f"Saved final model: {final}")
+    trainer.accelerator.wait_for_everyone()
 
 if __name__ == "__main__":
     main()

@@ -11,10 +11,13 @@ ARTIFACT_ROOT="${ARTIFACT_ROOT:-artifacts}"
 OUT_ROOT="${OUT_ROOT:-$ARTIFACT_ROOT/runs}"
 HF_CACHE_DIR="${HF_CACHE_DIR:-$ARTIFACT_ROOT/huggingface}"
 WANDB_DIR="${WANDB_DIR:-$ARTIFACT_ROOT/wandb}"
+KEEP_CHECKPOINTS="${KEEP_CHECKPOINTS:-0}"
+SAVE_TOTAL_LIMIT="${SAVE_TOTAL_LIMIT:-1}"
 MODEL_SLUG="${MODEL##*/}"
 OUT="$OUT_ROOT/${REGIME}__${MODEL_SLUG}__${METHOD}__seed${SEED}"
-EXTRA=(--wandb-dir "$WANDB_DIR")
+EXTRA=(--wandb-dir "$WANDB_DIR" --save-only-model)
 [[ "${WANDB:-0}" == "1" ]] && EXTRA+=(--wandb)
+[[ "$KEEP_CHECKPOINTS" == "1" ]] && EXTRA+=(--keep-checkpoints)
 
 # A rerun is deliberately fresh: never resume from an old checkpoint or mix
 # reports from two attempts. The guard limits deletion to this run root.
@@ -38,7 +41,7 @@ fi
   --output-dir "$OUT" --hf-cache-dir "$HF_CACHE_DIR" --num-train-epochs "$EPOCHS" \
   --per-device-train-batch-size 2 --gradient-accumulation-steps 4 \
   --max-seq-length 1024 --validation-ratio 0.1 --eval-steps 20 --early-stopping-patience 5 \
-  --logging-steps 5 --save-steps 20 --save-total-limit 3 \
+  --logging-steps 5 --save-steps 20 --save-total-limit "$SAVE_TOTAL_LIMIT" \
   --seed "$SEED" "${EXTRA[@]}"
 python evaluate.py \
   --data-dir "$DATA_DIR" --model "$OUT/final" --output-dir "$OUT/eval_final" --hf-cache-dir "$HF_CACHE_DIR" \

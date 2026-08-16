@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from auth_sft.data import canonical_target, prompt_with_separator, read_jsonl, split_train_validation_rows
+from auth_sft.logging_utils import prune_periodic_checkpoints
 from auth_sft.metrics import compute_metrics, extract_json_object, parse_json_object
 
 U={"id":"u","split":"auth_recombination","regime":"shared_eval","source":"email",
@@ -57,6 +58,13 @@ def test_benign_answer_is_not_an_unauthorized_execution():
 def test_read_schema(tmp_path:Path):
     p=tmp_path/"x.jsonl"; p.write_text(json.dumps(U)+"\n",encoding="utf-8")
     assert read_jsonl(p)[0]["id"]=="u"
+
+def test_prune_periodic_checkpoints_keeps_final_and_reports(tmp_path:Path):
+    for name in ("checkpoint-20", "checkpoint-40", "final", "checkpoint_evals"):
+        (tmp_path / name).mkdir()
+    assert prune_periodic_checkpoints(tmp_path) == ["checkpoint-20", "checkpoint-40"]
+    assert (tmp_path / "final").is_dir()
+    assert (tmp_path / "checkpoint_evals").is_dir()
 
 
 def test_validation_split_is_deterministic_and_keeps_pairs_together():
