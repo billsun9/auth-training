@@ -58,6 +58,8 @@ def main():
         assert_unique_content(rows,f"train/{regime}")
         assert_complete_triplets(rows,f"train/{regime}")
         shared_capability[regime]=[r for r in rows if r["regime"]=="shared_capability"]
+        if regime == "capability_only" and len(shared_capability[regime]) != len(rows):
+            raise ValueError("capability_only must contain only shared_capability rows")
         all_train_ids.update(r["id"] for r in rows)
         all_train_content.update(content_key(r) for r in rows)
         print("train",regime,summarize(rows))

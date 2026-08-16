@@ -6,19 +6,25 @@ training learns attack-specific shortcuts or contextual authorization.
 
 ## What this version generates
 
-Three SFT training distributions:
+Four SFT training conditions:
 
 - `attack_heavy`: explicit attacks are common; external imperative text is strongly correlated with unauthorized actions.
 - `diverse_attack`: more styles/mechanisms, but the same shortcut correlation largely remains.
 - `authorization_balanced`: reference, authorized, and unauthorized examples are emitted as matched counterfactual triplets. All members share the task context and fact; the reference has no embedded instruction, while the other two differ only in explicit delegation status and target.
+- `capability_only`: the byte-identical capability-rehearsal rows shared by the other three conditions, with no hierarchy examples.
 
-Five evaluation splits:
+Seven evaluation splits:
 
 - `iid`
 - `lexical_ood` (uses phrase/template families excluded from training)
 - `mechanism_ood` (holds out fake reasoning, policy citation, instruction redefinition, and completion-gate attacks from training)
 - `auth_recombination` (uses a fixed source × action matrix excluded from training, with both authorization labels)
 - `benign_control`
+
+Additional shared evaluation splits:
+
+- `auth_recombination_natural`: the held-out source × action combinations expressed with ordinary user-request wording rather than policy templates.
+- `authorization_policy_ood`: matched authorization triplets using authorization phrasings excluded from every training condition.
 
 Every row is JSONL and contains the prompt, structured target, factors, and metadata.
 Instruction text is composed from independently sampled action-phrase, style,
@@ -28,7 +34,8 @@ record their policy-template family and counterfactual triplet ID in metadata.
 The default training generation produces 3,000 regime-specific hierarchy rows
 and appends 1,000 shared capability-rehearsal rows to every regime file. These
 simple QA, extraction, JSON-formatting, and tool-call rows are byte-identical
-across the three files. Set `--n-capability 0` to disable them. The
+across the three authorization files. The `capability_only` file contains
+exactly those rows. Set `--n-capability 0` to disable them. The
 `mechanism_ood` split also holds out a small closed-domain
 extraction/classification subset in which untrusted data contains a conflicting
 instruction; use `--closed-domain-eval-fraction 0` to disable that subset.
@@ -48,7 +55,7 @@ python generate.py \
   --seed 0
 ```
 
-Generate 1k training examples for all three regimes and one shared evaluation
+Generate 1k training examples for all four conditions and one shared evaluation
 suite:
 
 ```bash
@@ -59,7 +66,7 @@ python generate.py \
   --seed 0
 ```
 
-For the repository's canonical 2,000-train / 200-eval layout:
+For the repository's canonical 3,000 hierarchy-row + 1,000 shared-capability-row / 200-eval layout:
 
 ```bash
 python generate.py --all-regimes --n-train 3000 --n-capability 1000 --n-eval-each 200 --seed 0
@@ -87,10 +94,13 @@ data/generated/
   train_attack_heavy.jsonl
   train_diverse_attack.jsonl
   train_authorization_balanced.jsonl
+  train_capability_only.jsonl
   eval_iid.jsonl
   eval_lexical_ood.jsonl
   eval_mechanism_ood.jsonl
   eval_auth_recombination.jsonl
+  eval_auth_recombination_natural.jsonl
+  eval_authorization_policy_ood.jsonl
   eval_benign_control.jsonl
 ```
 
@@ -108,8 +118,10 @@ python -m unittest discover -s tests -v
    - identical source text under counterfactual authorization;
    - source × action combinations held out explicitly from train;
    - realistic tool-call schemas.
-3. Create a formatting-only/benign SFT control.
-4. Add a Hugging Face SFT script only after the generated labels look correct.
+3. The formatting/capability-only control is `train_capability_only.jsonl`: it
+   contains the same 1,000 byte-identical shared capability rows included in
+   every hierarchy regime, and no authorization or prompt-injection rows.
+4. Add further real-world task families after the generated labels look correct.
 
 ## Current limitations
 
