@@ -1,6 +1,20 @@
-# Authorization SFT + Eval Pipeline
+# Authorization SFT + Evaluation Pipeline
 
-This package is designed for the **single canonical dataset layout**:
+This repository implements a completion-only causal-LM SFT experiment for the
+authorization dataset. Each example already contains a fully rendered prompt
+and a JSON-object target. Training serializes:
+
+```text
+<prompt><separator><target JSON><eos>
+```
+
+Only target and EOS tokens contribute to cross-entropy loss. Prompt and padding
+labels are `-100`. Evaluation uses the same prompt serializer, greedy JSON
+generation, structural parsing, and shared five-way evaluation suite.
+
+## Repository data
+
+The canonical data directory is:
 
 ```text
 authorization_dataset_v0/data/generated/
@@ -14,133 +28,181 @@ authorization_dataset_v0/data/generated/
   eval_benign_control.jsonl
 ```
 
-There is deliberately no support for the older nested-per-regime eval layout.
+The three training files are separate experimental regimes. The five eval files
+are shared across regimes. `validate_data.py` checks schema, canonical layout,
+split/regime labels, duplicate IDs, and exact prompt+target train/eval leakage.
 
-## Objective
+## Local setup and downloads
 
-Every row already has a fully rendered `prompt` and a JSON-object `target`. SFT trains:
-
-```text
-<prompt>\n<target JSON><eos>
-```
-
-with prompt labels masked to `-100`, i.e. **completion-only cross-entropy loss**. The model is never given `authorized`, `style`, `mechanism`, `is_attack`, or `attack_like` as extra labels; those fields are used only for analysis.
-
-No additional Qwen chat template is wrapped around the generated prompt. This preserves the exact training/eval prompt distribution.
-
-## Install
+Use a Python environment with a CUDA-enabled PyTorch build on the GPU cluster.
+Do not replace a working cluster CUDA PyTorch installation with a CPU wheel.
+From the repository checkout:
 
 ```bash
-pip install -r requirements.txt
-```
-
-## Validate data
-
-```bash
+conda activate nlp                 # or the cluster environment you use
+python -c 'import torch; print(torch.__version__, torch.cuda.is_available())'
+python -m pip install -r requirements.txt
 python validate_data.py
 ```
 
-Checks the required schema, canonical filenames, split/regime labels, uniqueness within files, and both ID-level and exact prompt+target train/eval disjointness. Training regimes are allowed to overlap with each other.
+The first smoke or training run downloads the Qwen2.5-0.5B-Instruct tokenizer
+and model into the configured local Hugging Face cache. Qwen2.5-0.5B-Instruct
+is the default model and does not require a private repository credential.
+On the cluster, the copy helper below puts this cache on `/local`; do not run
+the experiment from the home filesystem.
 
-## Smoke test
+## Slurm / node-local execution
 
-Tiny end-to-end **train + all-five-splits eval**:
-
-```bash
-bash scripts/smoke_test.sh
-```
-
-Defaults to Qwen2.5-0.5B-Instruct + LoRA, 16 train examples, 2 optimizer steps, and 8 examples per eval split. This only verifies plumbing; its metrics are not meaningful.
-
-## Main experiment: Qwen2.5-0.5B-Instruct
-
-One regime:
+`copy_helper.sh` lives in this repository and is the main entry point for the
+cluster workflow. Run it from the home-filesystem checkout, inside an existing
+Slurm GPU allocation:
 
 ```bash
-bash scripts/train_full.sh authorization_balanced
+cd /insomnia001/home/bys2107/research
+conda activate nlp
+bash auth-training/copy_helper.sh smoke
 ```
 
-The first comparison uses the attack-heavy and authorization-balanced regimes
-with identical settings:
+The helper copies source code and datasets to:
+
+```text
+/local/bys2107/research/auth-training
+```
+
+It then changes into that directory before running anything. All large or
+frequently written artifacts stay under:
+
+```text
+/local/bys2107/research/auth-training/artifacts/
+  huggingface/   # model/tokenizer downloads
+  runs/          # checkpoints, final weights, logs, metrics, predictions
+  wandb/         # W&B local files, if enabled
+  torch/         # Torch cache
+  cache/         # general cache
+  tmp/           # temporary files
+```
+
+The source checkout and its JSONL data are copied to local storage as well, so
+training data reads and all experiment writes happen under `/local`. Previous
+local artifacts are preserved because the helper does not use `rsync --delete`.
+Override the local root only when needed:
 
 ```bash
-bash scripts/run_full_matrix.sh
+AUTH_TRAINING_WORK_ROOT=/local/bys2107/research bash auth-training/copy_helper.sh smoke
 ```
 
-Default main settings:
-- full-parameter SFT
-- BF16
-- 2 GPUs via `torchrun` (`NPROC_PER_NODE=1` is supported for a single GPU)
-- global batch = 2 examples/GPU × 2 GPUs × 4 grad accumulation = 16
-- 2 epochs
-- LR 2e-5
-- gradient checkpointing
-- checkpoints every 20 optimizer steps
-- greedy eval on the same five shared files
+The helper profiles are:
 
-## Frozen baseline
+| Profile | Action |
+|---|---|
+| `smoke` | 16-example LoRA plumbing test, 2 optimizer steps, all five eval splits with 8 examples each |
+| `baseline` | Frozen Qwen2.5-0.5B-Instruct greedy evaluation on all five shared splits |
+| `initial` | Baseline, then identical full-SFT runs for `attack_heavy` and `authorization_balanced` |
+| `attack_heavy` | One full-SFT run plus evaluation |
+| `authorization_balanced` | One full-SFT run plus evaluation |
+
+## Smoke test and results
+
+Run:
 
 ```bash
-bash scripts/eval_baseline.sh
+bash auth-training/copy_helper.sh smoke
 ```
 
-## Qwen2.5-3B full SFT on 2×48GB
-
-Use full-shard FSDP:
+The smoke test is only a plumbing check; its metrics are not scientifically
+meaningful. Inspect results from the allocated node:
 
 ```bash
-bash scripts/train_full_3b_fsdp.sh authorization_balanced
+SMOKE=/local/bys2107/research/auth-training/artifacts/runs/smoke_authorization_balanced
+cat "$SMOKE/eval_smoke/eval_summary.json"
+cat "$SMOKE/eval_smoke/metrics_iid.json"
+less "$SMOKE/eval_smoke/predictions_iid.jsonl"
 ```
 
-Use the same optimization method/settings for every regime being compared. For a cheap 7B pilot, `METHOD=lora` is supported, but don't compare a LoRA-trained regime against a full-FT regime as if training method were controlled.
+Check that all five `metrics_*.json` and `predictions_*.jsonl` files exist and
+that the run reaches `final/`.
 
-## Logs
+## Initial experiment and results
 
-Each run writes:
-- `run_config.json`
-- `logs/train_log.jsonl`
-- `logs/trainer_log_history.jsonl`
-- `train_metrics.json`
-- `checkpoint-*` (model weights plus optimizer, scheduler, RNG, and trainer state)
-- `final/`
-- `eval_final/` (predictions and metrics when using the provided scripts)
-
-Downloaded Hugging Face model/tokenizer files go to `artifacts/huggingface` by
-default. Training checkpoints, final model weights, and evaluation outputs go
-under `artifacts/runs`. Set one root for the whole experiment, for example
-`ARTIFACT_ROOT=D:/auth-artifacts`; use `HF_CACHE_DIR` and `OUT_ROOT` for
-separate overrides. The Python entry points expose the cache setting as
-`--hf-cache-dir` and the output setting as `--output-dir`.
-When W&B is enabled, its local run files go to `artifacts/wandb` (or
-`WANDB_DIR`/`--wandb-dir`); W&B may also maintain its own small user cache.
-The Python entry points expose the same setting as `--hf-cache-dir`.
-
-Optional W&B:
+The initial meaningful comparison is frozen baseline plus identical full-SFT
+runs on `attack_heavy` and `authorization_balanced`:
 
 ```bash
-WANDB=1 bash scripts/train_full.sh authorization_balanced
+bash auth-training/copy_helper.sh initial
 ```
 
-## Evaluation outputs
+This uses Qwen2.5-0.5B-Instruct, full-parameter SFT, BF16, two GPUs by default,
+per-device batch size 2, gradient accumulation 4, nominal global batch size
+16, two epochs, learning rate `2e-5`, gradient checkpointing, and greedy eval
+on the same five shared files. Set `NPROC_PER_NODE=1` for a one-GPU allocation.
 
-Each split writes `predictions_<split>.jsonl` and `metrics_<split>.json`; all metrics are combined in `eval_summary.json`.
+Results are under:
 
-Core metrics:
-- JSON parse rate
-- exact **structured target** accuracy (JSON object equality; formatting/key-order don't matter)
-- action accuracy
-- authorized exact accuracy
-- unauthorized exact accuracy
-- **unauthorized_execution_rate**: unauthorized examples where the model executes `candidate_action`
-- counterfactual-pair exact/action accuracy
-- group accuracy by source/style/mechanism/candidate action/domain
+```text
+/local/bys2107/research/auth-training/artifacts/runs/
+  baseline__Qwen2.5-0.5B-Instruct/
+  attack_heavy__Qwen2.5-0.5B-Instruct__full__seed0/
+  authorization_balanced__Qwen2.5-0.5B-Instruct__full__seed0/
+```
 
-## Learning dynamics
+Inspect the final summaries:
+
+```bash
+ROOT=/local/bys2107/research/auth-training/artifacts/runs
+cat "$ROOT/baseline__Qwen2.5-0.5B-Instruct/eval_summary.json"
+cat "$ROOT/attack_heavy__Qwen2.5-0.5B-Instruct__full__seed0/eval_final/eval_summary.json"
+cat "$ROOT/authorization_balanced__Qwen2.5-0.5B-Instruct__full__seed0/eval_final/eval_summary.json"
+```
+
+Per-split metrics include JSON parse rate, exact structured-target accuracy,
+action accuracy, authorized and unauthorized exact/action accuracy,
+unauthorized-execution rate, counterfactual-pair accuracy, and factor
+breakdowns. Predictions are in the corresponding `predictions_<split>.jsonl`.
+
+For checkpoint learning curves:
 
 ```bash
 python evaluate_checkpoints.py \
-  --run-dir runs/authorization_balanced__Qwen2.5-0.5B-Instruct__full__seed0 \
-  --data-dir authorization_dataset_v0/data/generated
+  --run-dir "$ROOT/authorization_balanced__Qwen2.5-0.5B-Instruct__full__seed0" \
+  --data-dir /local/bys2107/research/auth-training/authorization_dataset_v0/data/generated \
+  --hf-cache-dir /local/bys2107/research/auth-training/artifacts/huggingface
 ```
 
-This evaluates every `checkpoint-*` plus `final` against the same shared eval suite.
+## Direct scripts
+
+If already running from the local copy, the underlying commands are:
+
+```bash
+bash scripts/smoke_test.sh
+bash scripts/eval_baseline.sh
+bash scripts/run_full_matrix.sh
+```
+
+Useful configuration variables include `ARTIFACT_ROOT`, `OUT_ROOT`,
+`HF_CACHE_DIR`, `WANDB_DIR`, `NPROC_PER_NODE`, `MODEL`, `SEED`, and `DATA_DIR`.
+The Python entry points expose equivalent `--output-dir` and
+`--hf-cache-dir` options.
+
+## Run artifacts
+
+Each training run writes `run_config.json`, training logs, trainer history,
+`train_metrics.json`, periodic checkpoints, and `final/`. Checkpoints include
+model weights plus optimizer, scheduler, RNG, and trainer state. Evaluation
+writes per-split predictions and metrics plus `eval_summary.json`.
+
+For full SFT, `final/` contains model weights. For LoRA, it contains adapter
+weights/configuration and reload metadata; inference reloads the base model
+from the configured Hugging Face cache.
+
+## Tests and CPU limitation
+
+Run the non-training checks with:
+
+```bash
+python validate_data.py
+python -m compileall -q auth_sft train_sft.py evaluate.py validate_data.py evaluate_checkpoints.py
+```
+
+The smoke test is the only intentionally trivial training test. Do not run the
+full baseline or SFT procedures on a CPU-only workstation; run them inside the
+GPU Slurm allocation through `copy_helper.sh`.
