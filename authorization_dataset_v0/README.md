@@ -25,7 +25,7 @@ Instruction text is composed from independently sampled action-phrase, style,
 lexical-family, and mechanism-wrapper factors. Paired examples additionally
 record their policy-template family and counterfactual triplet ID in metadata.
 
-The default training generation produces 2,500 regime-specific hierarchy rows
+The default training generation produces 3,000 regime-specific hierarchy rows
 and appends 1,000 shared capability-rehearsal rows to every regime file. These
 simple QA, extraction, JSON-formatting, and tool-call rows are byte-identical
 across the three files. Set `--n-capability 0` to disable them. Each shared eval split holds out a
@@ -62,7 +62,7 @@ python generate.py \
 For the repository's canonical 2,000-train / 200-eval layout:
 
 ```bash
-python generate.py --all-regimes --n-train 2500 --n-capability 1000 --n-eval-each 200 --seed 0
+python generate.py --all-regimes --n-train 3000 --n-capability 1000 --n-eval-each 200 --seed 0
 ```
 
 Regenerate the small, tracked preview set (20 balanced-training examples and

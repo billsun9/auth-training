@@ -28,7 +28,7 @@ authorization_dataset_v0/data/generated/
   eval_benign_control.jsonl
 ```
 
-The three training files are separate experimental regimes. Each has 2,500
+The three training files are separate experimental regimes. Each has 3,000
 regime-specific hierarchy rows plus 1,000 byte-identical `shared_capability`
 rehearsal rows by default. The five eval files are shared across regimes and
 include a held-out closed-domain injected-data subset. `validate_data.py` checks

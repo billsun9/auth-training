@@ -53,7 +53,7 @@ def main():
     p.add_argument("--all-regimes", action="store_true")
     p.add_argument("--preview", action="store_true",
                    help="Replace data/preview with 20 balanced-train rows and 10 rows per eval split")
-    p.add_argument("--n-train", type=int, default=2500,
+    p.add_argument("--n-train", type=int, default=3000,
                    help="Regime-specific hierarchy rows per training file")
     p.add_argument("--n-eval-each", type=int, default=100)
     p.add_argument("--n-capability", type=int, default=1000,
