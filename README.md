@@ -237,7 +237,8 @@ MODEL=Qwen/Qwen2.5-1.5B-Instruct \
 This appends those two split results to each run's canonical evaluation suite:
 `eval_final/` for SFT runs and the run root for the frozen baseline. It then
 syncs the small reports home. Re-run `summarize_results.py --outputs-dir outputs`
-after sync to see one complete table per run.
+after sync to see one complete table per run. The sync also removes the
+obsolete home-visible `eval_generalization/` report directory from prior runs.
 
 By default, a successful run keeps only `final/`, the restored best-validation-loss
 model. Periodic checkpoints are model-only temporary files (no optimizer state)

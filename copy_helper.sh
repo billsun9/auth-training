@@ -34,6 +34,15 @@ sync_reports() {
     rsync -a --prune-empty-dirs \
       --include '*/' --include '*.png' --include '*.json' --include '*.jsonl' \
       --exclude '*' "$OUT_ROOT/" "$REPORT_ROOT/"
+    # Remove only the obsolete report location used before generalization
+    # splits were appended to the canonical final evaluation suite.
+    while IFS= read -r -d '' legacy; do
+      case "$legacy" in
+        "$REPORT_ROOT"/*/eval_generalization|"$REPORT_ROOT"/*/plots/eval_generalization) ;;
+        *) echo "Refusing to remove unexpected legacy report path: $legacy" >&2; exit 2 ;;
+      esac
+      rm -rf "$legacy"
+    done < <(find "$REPORT_ROOT" -type d \( -name eval_generalization -o -path '*/plots/eval_generalization' \) -print0)
     PYTHONPATH="$SRC" python "$SRC/plot_comparison.py" \
       --runs-root "$OUT_ROOT" --output "$REPORT_ROOT/model_comparison.png" || true
   fi
