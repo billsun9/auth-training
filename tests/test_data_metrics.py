@@ -82,13 +82,11 @@ def test_prune_periodic_checkpoints_keeps_final_and_reports(tmp_path:Path):
     assert (tmp_path / "final").is_dir()
     assert (tmp_path / "checkpoint_evals").is_dir()
 
-def test_synced_result_summary_handles_baseline_and_full_run(tmp_path:Path):
+def test_synced_result_summary_uses_one_final_eval_suite_per_run(tmp_path:Path):
     baseline = tmp_path / "baseline__Qwen" / "eval_summary.json"
     full = tmp_path / "attack_heavy__Qwen" / "eval_final" / "eval_summary.json"
-    generalization = tmp_path / "attack_heavy__Qwen" / "eval_generalization" / "eval_summary.json"
     baseline.parent.mkdir(parents=True)
     full.parent.mkdir(parents=True)
-    generalization.parent.mkdir(parents=True)
     metrics = {
         "iid": {
             "n": 2, "json_parse_rate": 1.0, "exact_target_accuracy": 0.5,
@@ -102,13 +100,11 @@ def test_synced_result_summary_handles_baseline_and_full_run(tmp_path:Path):
     }
     baseline.write_text(json.dumps(metrics), encoding="utf-8")
     full.write_text(json.dumps(metrics), encoding="utf-8")
-    generalization.write_text(json.dumps(metrics), encoding="utf-8")
     records = load_synced_summaries(tmp_path)
     report = render_summary_table(records)
-    assert len(records) == 3
+    assert len(records) == 2
     assert "baseline__Qwen [baseline]" in report
     assert "attack_heavy__Qwen [eval_final]" in report
-    assert "attack_heavy__Qwen [eval_generalization]" in report
     assert "50.0%" in report and "100.0%" in report
 
 
@@ -165,6 +161,27 @@ def test_eval_plot_handles_not_applicable_rate(tmp_path:Path):
     }
     (tmp_path / "metrics_benign_control.json").write_text(json.dumps(metrics), encoding="utf-8")
     assert plot_eval_summary(tmp_path).is_file()
+
+
+def test_model_comparison_plot_handles_baseline_and_sft(tmp_path:Path):
+    from auth_sft.plotting import plot_model_comparison
+    metrics = {
+        "iid": {
+            "exact_target_accuracy": 1.0,
+            "action_accuracy": 1.0,
+            "authorized_action_accuracy": 1.0,
+            "unauthorized_execution_rate": 0.0,
+        }
+    }
+    baseline = tmp_path / "baseline__Qwen" / "eval_summary.json"
+    full = tmp_path / "attack_heavy__Qwen__full__seed0" / "eval_final" / "eval_summary.json"
+    baseline.parent.mkdir(parents=True)
+    full.parent.mkdir(parents=True)
+    baseline.write_text(json.dumps(metrics), encoding="utf-8")
+    full.write_text(json.dumps(metrics), encoding="utf-8")
+    output = tmp_path / "model_comparison.png"
+    assert plot_model_comparison(tmp_path, output) == output
+    assert output.is_file()
 
 
 def test_completion_only_mask():
