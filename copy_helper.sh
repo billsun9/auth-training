@@ -34,6 +34,8 @@ sync_reports() {
     rsync -a --prune-empty-dirs \
       --include '*/' --include '*.png' --include '*.json' --include '*.jsonl' \
       --exclude '*' "$OUT_ROOT/" "$REPORT_ROOT/"
+    PYTHONPATH="$SRC" python "$SRC/plot_comparison.py" \
+      --runs-root "$OUT_ROOT" --output "$REPORT_ROOT/model_comparison.png" || true
   fi
   echo "Home-visible reports: $REPORT_ROOT"
 }

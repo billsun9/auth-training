@@ -22,6 +22,8 @@ def parse_args():
     p.add_argument("--max-new-tokens",type=int,default=128)
     p.add_argument("--dtype",choices=["bf16","fp16","fp32"],default="bf16")
     p.add_argument("--seed",type=int,default=0)
+    p.add_argument("--append", action="store_true",
+                   help="Add these splits to an existing evaluation directory without replacing its other split results")
     return p.parse_args()
 
 @torch.inference_mode()
@@ -49,7 +51,10 @@ def main():
         a.model,a.dtype,cache_dir=a.hf_cache_dir,tokenizer_name_or_path=a.tokenizer,
     )
     out=Path(a.output_dir); out.mkdir(parents=True,exist_ok=True)
-    write_json(out/"eval_config.json", {
+    config_path = out / "eval_config.json"
+    summary_path = out / "eval_summary.json"
+    summary = {}
+    config = {
         "model": a.model, "tokenizer": a.tokenizer or a.model,
         "dtype": a.dtype, "batch_size": a.batch_size,
         "max_new_tokens": a.max_new_tokens, "seed": a.seed,
@@ -57,8 +62,19 @@ def main():
         "split_sha256": {
             split: sha256_file(Path(a.data_dir) / EVAL_FILES[split]) for split in splits
         },
-    })
-    summary={}
+    }
+    if a.append and summary_path.is_file():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    if a.append and config_path.is_file():
+        prior_config = json.loads(config_path.read_text(encoding="utf-8"))
+        for field in ("model", "tokenizer", "dtype", "seed", "max_samples_per_split"):
+            if prior_config.get(field) != config[field]:
+                raise ValueError(
+                    f"Refusing to append results with a different {field}: "
+                    f"existing={prior_config.get(field)!r}, requested={config[field]!r}"
+                )
+        config["split_sha256"] = {**prior_config.get("split_sha256", {}), **config["split_sha256"]}
+    write_json(config_path, config)
     for split in splits:
         rows=load_eval_rows(a.data_dir,split,a.max_samples_per_split,a.seed)
         raws,preds=generate_predictions(model,tok,rows,a.batch_size,a.max_new_tokens)

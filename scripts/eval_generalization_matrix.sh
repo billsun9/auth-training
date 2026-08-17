@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Evaluate already-trained final checkpoints on only the two deconfounded splits.
+# Add the two deconfounded splits to each run's single canonical evaluation set.
 DATA_DIR="${DATA_DIR:-authorization_dataset_v0/data/generated}"
 MODEL="${MODEL:-Qwen/Qwen2.5-1.5B-Instruct}"
 ARTIFACT_ROOT="${ARTIFACT_ROOT:-artifacts}"
@@ -30,13 +30,24 @@ for run_name in "${RUNS[@]}"; do
     [[ -d "${run}/final" ]] || { echo "Skipping run without final/: ${run_name}" >&2; continue; }
     model_ref="${run}/final"
   fi
-  out="${run}/eval_generalization"
-  case "${out}" in
-    "${run}"/eval_generalization) ;;
-    *) echo "Refusing to remove unexpected evaluation output: ${out}" >&2; exit 2 ;;
-  esac
-  rm -rf "${out}"
+  if [[ "${run_name}" == baseline__* ]]; then
+    out="${run}"
+  else
+    out="${run}/eval_final"
+  fi
   python evaluate.py \
     --data-dir "${DATA_DIR}" --model "${model_ref}" --output-dir "${out}" \
-    --hf-cache-dir "${HF_CACHE_DIR}" --splits "${SPLITS[@]}" --batch-size 8 --max-new-tokens 128
+    --hf-cache-dir "${HF_CACHE_DIR}" --splits "${SPLITS[@]}" --batch-size 8 --max-new-tokens 128 --append
+
+  # Earlier revisions placed these same results in a second evaluation
+  # directory. They are now merged into the canonical evaluation suite.
+  legacy_eval="${run}/eval_generalization"
+  legacy_plot="${run}/plots/eval_generalization"
+  for legacy in "${legacy_eval}" "${legacy_plot}"; do
+    case "${legacy}" in
+      "${run}"/eval_generalization|"${run}"/plots/eval_generalization) ;;
+      *) echo "Refusing to remove unexpected legacy path: ${legacy}" >&2; exit 2 ;;
+    esac
+    [[ -e "${legacy}" ]] && rm -rf "${legacy}"
+  done
 done

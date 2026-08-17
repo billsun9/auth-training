@@ -234,9 +234,10 @@ MODEL=Qwen/Qwen2.5-1.5B-Instruct \
   bash auth-training/copy_helper.sh generalization_eval
 ```
 
-This writes `eval_generalization/` under each available run, then syncs the
-small reports home. Re-run `summarize_results.py --outputs-dir outputs` after
-sync to show both the final and generalization-only tables.
+This appends those two split results to each run's canonical evaluation suite:
+`eval_final/` for SFT runs and the run root for the frozen baseline. It then
+syncs the small reports home. Re-run `summarize_results.py --outputs-dir outputs`
+after sync to see one complete table per run.
 
 By default, a successful run keeps only `final/`, the restored best-validation-loss
 model. Periodic checkpoints are model-only temporary files (no optimizer state)
@@ -276,7 +277,8 @@ It writes PNGs to `$RUN/plots/`:
 
 - `training_progress.png`: training loss, held-out validation loss (for full-SFT), learning rate, and gradient norm over optimizer steps;
 - `checkpoint_eval_progress.png`: exact-target accuracy, action accuracy, and unauthorized-execution rate across checkpoint evaluations and final;
-- `eval_summary.png`: final metrics across all seven eval splits.
+- `eval_summary.png`: clearly titled final metrics across all seven eval splits, using horizontal split labels for readability;
+- `outputs/model_comparison.png`: a clearly titled cross-model comparison of exact/action accuracy, AER, and UER across every available baseline/SFT condition. It is created automatically by `copy_helper.sh sync`.
 
 Choose another output location with `--output-dir`. For the smoke run, use:
 

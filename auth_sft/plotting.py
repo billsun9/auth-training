@@ -22,6 +22,26 @@ def _plt():
     return plt
 
 
+def _run_dir_for_eval(eval_dir: Path) -> Path:
+    return eval_dir.parent if eval_dir.name in {"eval_final", "eval_smoke"} else eval_dir
+
+
+def _run_label(eval_dir: Path) -> str:
+    """Return a concise, human-readable model/condition label."""
+    run_dir = _run_dir_for_eval(eval_dir)
+    config_path = run_dir / "run_config.json"
+    if config_path.is_file():
+        config = _load_json(config_path)
+        regime = str(config.get("regime", run_dir.name)).replace("_", " ")
+        model = str(config.get("model", "unknown model")).split("/")[-1]
+        return f"{regime} — {model}"
+    config_path = eval_dir / "eval_config.json"
+    if config_path.is_file():
+        model = str(_load_json(config_path).get("model", "unknown model")).split("/")[-1]
+        return f"frozen baseline — {model}"
+    return run_dir.name
+
+
 def plot_training_progress(run_dir: str | Path, output_dir: str | Path | None = None) -> Path:
     """Plot logged loss and optimizer diagnostics against training step."""
     run_dir = Path(run_dir)
@@ -52,7 +72,7 @@ def plot_training_progress(run_dir: str | Path, output_dir: str | Path | None = 
     axes[1].set_ylabel("optimizer diagnostics")
     axes[1].set_xlabel("optimizer step")
     axes[1].legend(loc="best")
-    fig.suptitle(run_dir.name)
+    fig.suptitle(f"Training progress — {_run_label(run_dir)}")
     fig.tight_layout()
     out = output_dir / "training_progress.png"
     fig.savefig(out, dpi=160)
@@ -117,28 +137,114 @@ def plot_eval_summary(eval_dir: str | Path, output_dir: str | Path | None = None
         raise FileNotFoundError(f"No metrics_*.json files under {eval_dir}")
     rows = [(p.stem.removeprefix("metrics_"), _load_json(p)) for p in files]
     plt = _plt()
-    fig, axes = plt.subplots(1, 4, figsize=(18, 5), sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharey=True)
+    axes = axes.ravel()
     metrics = (
         ("exact_target_accuracy", "exact target"),
         ("action_accuracy", "action"),
         ("authorized_execution_rate", "authorized execution"),
         ("unauthorized_execution_rate", "unauthorized execution"),
     )
-    x = list(range(len(rows)))
+    y = list(range(len(rows)))
     for axis, (field, title) in zip(axes, metrics):
         values = [
             value if isinstance(value, (int, float)) else float("nan")
             for value in (metrics_row.get(field) for _, metrics_row in rows)
         ]
-        axis.bar(x, values)
+        axis.barh(y, values)
         axis.set_title(title)
         axis.set_ylim(0, 1)
-        axis.set_xticks(x, [name.replace("_", "\n") for name, _ in rows], rotation=0)
-        axis.grid(axis="y", alpha=0.25)
-    axes[0].set_ylabel("accuracy / rate")
-    fig.suptitle(eval_dir.name)
+        axis.set_xlim(0, 1)
+        axis.set_yticks(y, [name.replace("_", " ") for name, _ in rows])
+        axis.invert_yaxis()
+        axis.grid(axis="x", alpha=0.25)
+    fig.suptitle(f"Final evaluation — {_run_label(eval_dir)}")
     fig.tight_layout()
     out = output_dir / "eval_summary.png"
     fig.savefig(out, dpi=160)
     plt.close(fig)
     return out
+
+
+def _comparison_label(run_dir: Path) -> str | None:
+    name = run_dir.name
+    condition = None
+    if name.startswith("baseline__"):
+        condition = "Frozen baseline"
+    for prefix, label in (
+        ("capability_only__", "Capability-only SFT"),
+        ("attack_heavy__", "Attack-heavy SFT"),
+        ("diverse_attack__", "Diverse-attack SFT"),
+        ("authorization_balanced__", "Authorization-balanced SFT"),
+    ):
+        if name.startswith(prefix):
+            condition = label
+            break
+    model = "unknown model"
+    config_path = run_dir / "run_config.json"
+    if config_path.is_file():
+        model = str(_load_json(config_path).get("model", model)).split("/")[-1]
+    elif (run_dir / "eval_config.json").is_file():
+        model = str(_load_json(run_dir / "eval_config.json").get("model", model)).split("/")[-1]
+    return f"{condition}\n{model}" if condition else None
+
+
+def plot_model_comparison(runs_root: str | Path, output_path: str | Path) -> Path:
+    """Compare final evaluation metrics across every available model condition."""
+    runs_root = Path(runs_root)
+    records = []
+    for run_dir in sorted(path for path in runs_root.iterdir() if path.is_dir()):
+        summary_path = run_dir / "eval_final" / "eval_summary.json"
+        if not summary_path.is_file():
+            summary_path = run_dir / "eval_summary.json"
+        label = _comparison_label(run_dir)
+        if label and summary_path.is_file():
+            records.append((label, _load_json(summary_path)))
+    if not records:
+        raise FileNotFoundError(f"No final eval_summary.json files under {runs_root}")
+
+    splits = []
+    for _, summary in records:
+        for split in summary:
+            if split not in splits:
+                splits.append(split)
+    plt = _plt()
+    fig, axes = plt.subplots(2, 2, figsize=(16, 11), sharey=True)
+    axes = axes.ravel()
+    metrics = (
+        ("exact_target_accuracy", "Exact target accuracy"),
+        ("action_accuracy", "Action accuracy"),
+        ("authorized_execution_rate", "Authorized execution rate (AER)"),
+        ("unauthorized_execution_rate", "Unauthorized execution rate (UER; lower is better)"),
+    )
+    height = 0.78 / len(records)
+    centers = list(range(len(splits)))
+    for axis, (field, title) in zip(axes, metrics):
+        for index, (label, summary) in enumerate(records):
+            values = []
+            for split in splits:
+                split_metrics = summary.get(split, {})
+                value = split_metrics.get(field)
+                # Older reports predate the explicit AER field; their
+                # authorized-action metric is equivalent for these tool-only
+                # authorization examples.
+                if field == "authorized_execution_rate" and value is None:
+                    value = split_metrics.get("authorized_action_accuracy")
+                values.append(value)
+            values = [value if isinstance(value, (int, float)) else float("nan") for value in values]
+            positions = [center - 0.39 + height * (index + 0.5) for center in centers]
+            axis.barh(positions, values, height=height, label=label)
+        axis.set_title(title)
+        axis.set_xlim(0, 1)
+        axis.set_yticks(centers, [split.replace("_", " ") for split in splits])
+        axis.invert_yaxis()
+        axis.grid(axis="x", alpha=0.25)
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="lower center", ncol=min(3, len(records)))
+    fig.suptitle("Final evaluation comparison across available model conditions")
+    fig.tight_layout(rect=(0, 0.08, 1, 0.95))
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
+    return output_path

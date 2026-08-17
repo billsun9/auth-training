@@ -16,8 +16,11 @@ def load_synced_summaries(outputs_dir: str | Path, run_names: set[str] | None = 
     for run_dir in sorted(path for path in root.iterdir() if path.is_dir()):
         if run_names and run_dir.name not in run_names:
             continue
-        candidates = [(path.name, path / "eval_summary.json") for path in sorted(run_dir.glob("eval_*"))]
-        candidates.append(("baseline", run_dir / "eval_summary.json"))
+        candidates = [
+            ("eval_final", run_dir / "eval_final" / "eval_summary.json"),
+            ("eval_smoke", run_dir / "eval_smoke" / "eval_summary.json"),
+            ("baseline", run_dir / "eval_summary.json"),
+        ]
         for evaluation_kind, summary_path in candidates:
             if summary_path.is_file():
                 with summary_path.open(encoding="utf-8") as handle:

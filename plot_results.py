@@ -26,14 +26,12 @@ def main():
             created.append(fn())
         except FileNotFoundError as exc:
             print(f"Skipped: {exc}")
-    eval_dirs = [run_dir]
-    eval_dirs.extend(sorted(path for path in run_dir.glob("eval_*") if path.is_dir()))
+    # A run has one canonical evaluation suite: eval_final for SFT, eval_smoke
+    # for smoke tests, or the run root for a frozen baseline.
+    eval_dirs = [run_dir, run_dir / "eval_final", run_dir / "eval_smoke"]
     for eval_dir in eval_dirs:
         if eval_dir.is_dir() and any(eval_dir.glob("metrics_*.json")):
-            target_dir = output_dir if eval_dir == run_dir or eval_dir.name in {
-                "eval_final", "eval_smoke"
-            } else output_dir / eval_dir.name
-            created.append(plot_eval_summary(eval_dir, target_dir))
+            created.append(plot_eval_summary(eval_dir, output_dir))
     if not created:
         raise SystemExit("No plot-ready artifacts found")
     for path in created:
