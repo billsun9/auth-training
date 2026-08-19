@@ -11,7 +11,12 @@ def main():
     parser.add_argument("--runs-root", required=True)
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
-    print(plot_model_comparison(args.runs_root, args.output))
+    try:
+        print(plot_model_comparison(args.runs_root, args.output))
+    except FileNotFoundError as exc:
+        # A smoke-only node has no comparable baseline/full-SFT conditions.
+        # This is normal during report sync, not an error.
+        print(f"Skipped: {exc}")
 
 
 if __name__ == "__main__":
