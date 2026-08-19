@@ -298,6 +298,28 @@ python plot_results.py --outputs-dir outputs
 The plotting command only reads existing logs/metrics and writes small PNG
 files; it does not load the model or run evaluation.
 
+## Local data and prediction browser
+
+`results_browser.py` is a small local Flask app for inspecting the generated
+training/evaluation rows and the synced prediction records side by side. It
+renders each prompt as distinct system, user, and external-content panels, and
+renders the ground-truth JSON target next to the parsed model prediction and
+raw completion. It is read-only: no model is loaded and no files are changed.
+
+After `copy_helper.sh sync`, run this from the home checkout:
+
+```bash
+python results_browser.py --outputs-dir outputs
+```
+
+Open `http://127.0.0.1:8000`. On an SSH-only cluster session, forward that
+port from your local machine (for example, `ssh -L 8000:127.0.0.1:8000 ...`)
+before opening the URL. Use `Ctrl-C` to stop the app.
+
+The small synced `outputs/` reports are intentionally versionable; they exclude
+weights, checkpoints, optimizer state, and caches. Review their size and
+contents before committing a new experiment's reports.
+
 ## Direct scripts
 
 If already running from the local copy, the underlying commands are:

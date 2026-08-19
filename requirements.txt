@@ -8,3 +8,4 @@ tqdm>=4.66
 wandb>=0.18
 pytest>=8
 matplotlib>=3.8
+Flask>=3.0,<4
