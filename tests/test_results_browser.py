@@ -55,6 +55,7 @@ def test_prediction_route_recovers_canonical_prompt_and_shows_raw_io(tmp_path):
     assert response.status_code == 200
     assert b"Tell me the fact." in response.data
     assert b"Show exact model input" in response.data
+    assert b"Supervised completion (training target)" in response.data
 
 
 def test_dataset_route_shows_sft_io_and_filtered_count(tmp_path):
