@@ -288,6 +288,13 @@ python plot_results.py \
   --run-dir /local/bys2107/research/auth-training/artifacts/runs/smoke_authorization_balanced
 ```
 
+To regenerate every plot—including the cross-model comparison—from the
+home-visible reports alone (no model weights or GPU required), run:
+
+```bash
+python plot_results.py --outputs-dir outputs
+```
+
 The plotting command only reads existing logs/metrics and writes small PNG
 files; it does not load the model or run evaluation.
 

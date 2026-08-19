@@ -25,27 +25,24 @@ REPORT_ROOT="$SRC/outputs"
 sync_reports() {
   mkdir -p "$REPORT_ROOT"
   if [[ -d "$OUT_ROOT" ]]; then
-    # Regenerate lightweight plots when the source checkout has plotting code.
-    while IFS= read -r -d '' run_dir; do
-      PYTHONPATH="$SRC" python "$SRC/plot_results.py" --run-dir "$run_dir" || true
-    done < <(find "$OUT_ROOT" -mindepth 1 -maxdepth 1 -type d -print0)
     # Copy only human-readable reports; never copy checkpoints, model weights,
     # optimizer state, or Hugging Face cache back to the home filesystem.
     rsync -a --prune-empty-dirs \
       --include '*/' --include '*.png' --include '*.json' --include '*.jsonl' \
       --exclude '*' "$OUT_ROOT/" "$REPORT_ROOT/"
-    # Remove only the obsolete report location used before generalization
-    # splits were appended to the canonical final evaluation suite.
-    while IFS= read -r -d '' legacy; do
-      case "$legacy" in
-        "$REPORT_ROOT"/*/eval_generalization|"$REPORT_ROOT"/*/plots/eval_generalization) ;;
-        *) echo "Refusing to remove unexpected legacy report path: $legacy" >&2; exit 2 ;;
-      esac
-      rm -rf "$legacy"
-    done < <(find "$REPORT_ROOT" -type d \( -name eval_generalization -o -path '*/plots/eval_generalization' \) -print0)
-    PYTHONPATH="$SRC" python "$SRC/plot_comparison.py" \
-      --runs-root "$OUT_ROOT" --output "$REPORT_ROOT/model_comparison.png" || true
   fi
+  # Remove only the obsolete report location used before generalization splits
+  # were appended to the canonical final evaluation suite.
+  while IFS= read -r -d '' legacy; do
+    case "$legacy" in
+      "$REPORT_ROOT"/*/eval_generalization|"$REPORT_ROOT"/*/plots/eval_generalization) ;;
+      *) echo "Refusing to remove unexpected legacy report path: $legacy" >&2; exit 2 ;;
+    esac
+    rm -rf "$legacy"
+  done < <(find "$REPORT_ROOT" -type d \( -name eval_generalization -o -path '*/plots/eval_generalization' \) -print0)
+  # Regenerate every visualization from lightweight synced reports. This works
+  # even on a new node whose /local directory lacks old checkpoints.
+  PYTHONPATH="$SRC" python "$SRC/plot_results.py" --outputs-dir "$REPORT_ROOT" || true
   echo "Home-visible reports: $REPORT_ROOT"
 }
 
