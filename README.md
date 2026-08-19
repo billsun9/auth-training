@@ -278,8 +278,8 @@ It writes PNGs to `$RUN/plots/`:
 
 - `training_progress.png`: training loss, held-out validation loss (for full-SFT), learning rate, and gradient norm over optimizer steps;
 - `checkpoint_eval_progress.png`: exact-target accuracy, action accuracy, and unauthorized-execution rate across checkpoint evaluations and final;
-- `eval_summary.png`: clearly titled final metrics across all seven eval splits, using horizontal split labels for readability;
-- `outputs/model_comparison.png`: a clearly titled cross-model comparison of exact/action accuracy, AER, and UER across every available baseline/SFT condition. It is created automatically by `copy_helper.sh sync`.
+- `eval_summary.png`: an annotated per-run scorecard covering JSON validity, exact/action accuracy, AER, unauthorized-action avoidance, authorization/reference exactness, counterfactual consistency, and a dedicated benign-control panel;
+- `outputs/model_comparison.png`: an annotated cross-model scorecard for exact accuracy, JSON validity, AER, unauthorized-action avoidance, recombination triplet accuracy, and benign-control behavior. It is created automatically by `copy_helper.sh sync`.
 
 Choose another output location with `--output-dir`. For the smoke run, use:
 

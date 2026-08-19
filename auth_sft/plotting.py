@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 
@@ -20,6 +21,81 @@ def _plt():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     return plt
+
+
+SPLIT_ORDER = (
+    "iid", "lexical_ood", "mechanism_ood", "auth_recombination",
+    "auth_recombination_natural", "authorization_policy_ood", "benign_control",
+)
+
+
+def _ordered_splits(summaries):
+    present = {split for summary in summaries for split in summary}
+    ordered = [split for split in SPLIT_ORDER if split in present]
+    return ordered + sorted(present - set(ordered))
+
+
+def _split_label(split: str) -> str:
+    return split.replace("_", "\n")
+
+
+def _metric_value(metrics: dict, metric: str):
+    """Get a scorecard value, converting lower-is-better safety rates."""
+    if metric == "unauthorized_action_avoidance":
+        value = metrics.get("unauthorized_execution_rate")
+        return None if value is None else 1 - value
+    if metric == "benign_no_unexpected_tool_execution":
+        value = metrics.get("benign_unexpected_tool_execution_rate")
+        return None if value is None else 1 - value
+    if metric == "counterfactual_pair_exact":
+        return metrics.get("counterfactual_pairs", {}).get("pair_exact_accuracy")
+    if metric == "counterfactual_triplet_exact":
+        return metrics.get("counterfactual_triplets", {}).get("triplet_exact_accuracy")
+    value = metrics.get(metric)
+    # Old reports do not contain AER; for these tool-only authorization tasks,
+    # authorized action accuracy is its equivalent historical measure.
+    if metric == "authorized_execution_rate" and value is None:
+        value = metrics.get("authorized_action_accuracy")
+    return value
+
+
+def _score_matrix(rows, columns, metric):
+    return [
+        [
+            value if isinstance(value := _metric_value(row.get(column, {}), metric), (int, float))
+            else float("nan")
+            for column in columns
+        ]
+        for row in rows
+    ]
+
+
+def _annotated_heatmap(axis, values, row_labels, column_labels, title):
+    """Render an annotation-first rate scorecard; grey cells are not applicable."""
+    plt = _plt()
+    cmap = plt.get_cmap("YlGnBu").copy()
+    cmap.set_bad("#e5e7eb")
+    values = [
+        [value if isinstance(value, (int, float)) else float("nan") for value in row]
+        for row in values
+    ]
+    image = axis.imshow(values, cmap=cmap, vmin=0, vmax=1, aspect="auto")
+    axis.set_title(title, fontsize=11, fontweight="bold", pad=10)
+    axis.set_xticks(range(len(column_labels)), column_labels, fontsize=8)
+    axis.set_yticks(range(len(row_labels)), row_labels, fontsize=8)
+    for row_index, row in enumerate(values):
+        for col_index, value in enumerate(row):
+            if isinstance(value, (int, float)) and not math.isnan(value):
+                label = f"{100 * value:.0f}%"
+                color = "white" if value >= 0.58 else "#111827"
+            else:
+                label, color = "–", "#6b7280"
+            axis.text(col_index, row_index, label, ha="center", va="center", fontsize=8, color=color)
+    axis.set_xticks([index - 0.5 for index in range(1, len(column_labels))], minor=True)
+    axis.set_yticks([index - 0.5 for index in range(1, len(row_labels))], minor=True)
+    axis.grid(which="minor", color="white", linewidth=1.4)
+    axis.tick_params(which="minor", bottom=False, left=False)
+    return image
 
 
 def _run_dir_for_eval(eval_dir: Path) -> Path:
@@ -128,38 +204,51 @@ def plot_checkpoint_eval_progress(run_dir: str | Path, output_dir: str | Path | 
 
 
 def plot_eval_summary(eval_dir: str | Path, output_dir: str | Path | None = None) -> Path:
-    """Plot final exact/action/authorized/unauthorized-execution metrics by eval split."""
+    """Render an annotated final-evaluation scorecard for one model run."""
     eval_dir = Path(eval_dir)
     output_dir = Path(output_dir or eval_dir / "plots")
     output_dir.mkdir(parents=True, exist_ok=True)
     files = sorted(eval_dir.glob("metrics_*.json"))
     if not files:
         raise FileNotFoundError(f"No metrics_*.json files under {eval_dir}")
-    rows = [(p.stem.removeprefix("metrics_"), _load_json(p)) for p in files]
+    summary = {p.stem.removeprefix("metrics_"): _load_json(p) for p in files}
+    splits = _ordered_splits([summary])
     plt = _plt()
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10), sharey=True)
-    axes = axes.ravel()
-    metrics = (
-        ("exact_target_accuracy", "exact target"),
-        ("action_accuracy", "action"),
-        ("authorized_execution_rate", "authorized execution"),
-        ("unauthorized_execution_rate", "unauthorized execution"),
+    fig, axes = plt.subplots(
+        2, 1, figsize=(15, 12),
+        gridspec_kw={"height_ratios": [10, 3]}, layout="constrained",
     )
-    y = list(range(len(rows)))
-    for axis, (field, title) in zip(axes, metrics):
-        values = [
-            value if isinstance(value, (int, float)) else float("nan")
-            for value in (metrics_row.get(field) for _, metrics_row in rows)
-        ]
-        axis.barh(y, values)
-        axis.set_title(title)
-        axis.set_ylim(0, 1)
-        axis.set_xlim(0, 1)
-        axis.set_yticks(y, [name.replace("_", " ") for name, _ in rows])
-        axis.invert_yaxis()
-        axis.grid(axis="x", alpha=0.25)
+    primary_metrics = (
+        ("json_parse_rate", "JSON valid"),
+        ("exact_target_accuracy", "Exact target"),
+        ("action_accuracy", "Action accuracy"),
+        ("authorized_execution_rate", "Authorized execution (AER)"),
+        ("unauthorized_action_avoidance", "Unauthorized action avoidance"),
+        ("authorized_exact_target_accuracy", "Authorized exact"),
+        ("unauthorized_exact_target_accuracy", "Unauthorized exact"),
+        ("reference_exact_target_accuracy", "Reference exact"),
+        ("counterfactual_pair_exact", "Counterfactual pair exact"),
+        ("counterfactual_triplet_exact", "Counterfactual triplet exact"),
+    )
+    _annotated_heatmap(
+        axes[0],
+        [_score_matrix([summary], splits, metric)[0] for metric, _ in primary_metrics],
+        [label for _, label in primary_metrics], [_split_label(split) for split in splits],
+        "Evaluation scorecard (higher is better; grey = not applicable)",
+    )
+    benign_metrics = (
+        ("json_parse_rate", "JSON valid"),
+        ("benign_answer_action_rate", "Answer action"),
+        ("benign_no_unexpected_tool_execution", "No unexpected tool action"),
+        ("exact_target_accuracy", "Exact content"),
+    )
+    _annotated_heatmap(
+        axes[1],
+        [[_metric_value(summary.get("benign_control", {}), metric) for metric, _ in benign_metrics]],
+        ["benign control"], [label for _, label in benign_metrics],
+        "Benign-control behavior",
+    )
     fig.suptitle(f"Final evaluation — {_run_label(eval_dir)}")
-    fig.tight_layout()
     out = output_dir / "eval_summary.png"
     fig.savefig(out, dpi=160)
     plt.close(fig)
@@ -189,6 +278,17 @@ def _comparison_label(run_dir: Path) -> str | None:
     return f"{condition}\n{model}" if condition else None
 
 
+def _comparison_order(label: str) -> int:
+    condition = label.split("\n", 1)[0]
+    return {
+        "Frozen baseline": 0,
+        "Capability-only SFT": 1,
+        "Attack-heavy SFT": 2,
+        "Diverse-attack SFT": 3,
+        "Authorization-balanced SFT": 4,
+    }.get(condition, 99)
+
+
 def plot_model_comparison(runs_root: str | Path, output_path: str | Path) -> Path:
     """Compare final evaluation metrics across every available model condition."""
     runs_root = Path(runs_root)
@@ -202,47 +302,52 @@ def plot_model_comparison(runs_root: str | Path, output_path: str | Path) -> Pat
             records.append((label, _load_json(summary_path)))
     if not records:
         raise FileNotFoundError(f"No final eval_summary.json files under {runs_root}")
+    records.sort(key=lambda item: (_comparison_order(item[0]), item[0]))
 
-    splits = []
-    for _, summary in records:
-        for split in summary:
-            if split not in splits:
-                splits.append(split)
+    labels = [label for label, _ in records]
+    summaries = [summary for _, summary in records]
+    splits = _ordered_splits(summaries)
     plt = _plt()
-    fig, axes = plt.subplots(2, 2, figsize=(16, 11), sharey=True)
+    fig, axes = plt.subplots(3, 2, figsize=(18, 16), layout="constrained")
     axes = axes.ravel()
-    metrics = (
+    scorecards = (
         ("exact_target_accuracy", "Exact target accuracy"),
-        ("action_accuracy", "Action accuracy"),
+        ("json_parse_rate", "JSON validity"),
         ("authorized_execution_rate", "Authorized execution rate (AER)"),
-        ("unauthorized_execution_rate", "Unauthorized execution rate (UER; lower is better)"),
+        ("unauthorized_action_avoidance", "Unauthorized action avoidance (1 − UER)"),
     )
-    height = 0.78 / len(records)
-    centers = list(range(len(splits)))
-    for axis, (field, title) in zip(axes, metrics):
-        for index, (label, summary) in enumerate(records):
-            values = []
-            for split in splits:
-                split_metrics = summary.get(split, {})
-                value = split_metrics.get(field)
-                # Older reports predate the explicit AER field; their
-                # authorized-action metric is equivalent for these tool-only
-                # authorization examples.
-                if field == "authorized_execution_rate" and value is None:
-                    value = split_metrics.get("authorized_action_accuracy")
-                values.append(value)
-            values = [value if isinstance(value, (int, float)) else float("nan") for value in values]
-            positions = [center - 0.39 + height * (index + 0.5) for center in centers]
-            axis.barh(positions, values, height=height, label=label)
-        axis.set_title(title)
-        axis.set_xlim(0, 1)
-        axis.set_yticks(centers, [split.replace("_", " ") for split in splits])
-        axis.invert_yaxis()
-        axis.grid(axis="x", alpha=0.25)
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=min(3, len(records)))
+    for axis, (metric, title) in zip(axes, scorecards):
+        _annotated_heatmap(
+            axis, _score_matrix(summaries, splits, metric), labels,
+            [_split_label(split) for split in splits], title,
+        )
+    recombination_splits = [
+        split for split in (
+            "auth_recombination", "auth_recombination_natural", "authorization_policy_ood",
+        ) if split in splits
+    ]
+    if not recombination_splits:
+        recombination_splits = ["not_available"]
+    _annotated_heatmap(
+        axes[4], _score_matrix(summaries, recombination_splits, "counterfactual_triplet_exact"), labels,
+        ["not\navailable" if split == "not_available" else _split_label(split) for split in recombination_splits],
+        "Counterfactual triplet exact accuracy",
+    )
+    benign_metrics = (
+        ("json_parse_rate", "JSON valid"),
+        ("benign_answer_action_rate", "Answer action"),
+        ("benign_no_unexpected_tool_execution", "No unexpected tool action"),
+        ("exact_target_accuracy", "Exact content"),
+    )
+    benign_values = [
+        [_metric_value(summary.get("benign_control", {}), metric) for metric, _ in benign_metrics]
+        for summary in summaries
+    ]
+    _annotated_heatmap(
+        axes[5], benign_values, labels, [label for _, label in benign_metrics],
+        "Benign-control behavior",
+    )
     fig.suptitle("Final evaluation comparison across available model conditions")
-    fig.tight_layout(rect=(0, 0.08, 1, 0.95))
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=160)
