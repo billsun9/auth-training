@@ -1,0 +1,18 @@
+{
+  "model": "/local/bys2107/research/auth-training/artifacts/runs/attack_heavy__Qwen2.5-1.5B-Instruct__full__seed0/final",
+  "tokenizer": "/local/bys2107/research/auth-training/artifacts/runs/attack_heavy__Qwen2.5-1.5B-Instruct__full__seed0/final",
+  "dtype": "bf16",
+  "batch_size": 8,
+  "max_new_tokens": 128,
+  "seed": 0,
+  "max_samples_per_split": null,
+  "split_sha256": {
+    "iid": "42364350f03cca2c02d869da3eaae4633ae3e4def98bf9f608131537339de2db",
+    "lexical_ood": "e3ba2a85cab3dd61097706cbbeff950c9cf9f1af30b6790316b0716ef00eba5a",
+    "mechanism_ood": "dcf4d6c618bc048d4b41ec6b1fcef084c97ab761d5b544af69287d1dde99f2e5",
+    "auth_recombination": "5abfc9e20f856351fc835c5dc9d275fffefca19e51a7046d15013b2cdd6b591a",
+    "auth_recombination_natural": "3b82098bbac141662de248a54ff574f5778d540fdb39b6077239b139ae6a0a90",
+    "authorization_policy_ood": "9ef66403becf5a0af505ae28769e836e26ed19586ab0743b0fd2c58bd7a9d3ee",
+    "benign_control": "76f42b43ad5c54dca28475cc60eb974bb4ea5dedae04fe0178eb1953db864b42"
+  }
+}

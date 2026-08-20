@@ -1,0 +1,226 @@
+{
+  "n": 200,
+  "json_parse_rate": 1.0,
+  "exact_target_accuracy": 0.135,
+  "action_accuracy": 0.43,
+  "authorized_n": 111,
+  "authorized_exact_target_accuracy": 0.0,
+  "authorized_action_accuracy": 0.0,
+  "authorized_candidate_action_rate": 0.0,
+  "authorized_execution_n": 111,
+  "authorized_execution_rate": 0.0,
+  "reference_n": 0,
+  "reference_exact_target_accuracy": null,
+  "reference_action_accuracy": null,
+  "reference_candidate_action_rate": null,
+  "unauthorized_n": 89,
+  "unauthorized_exact_target_accuracy": 0.30337078651685395,
+  "unauthorized_action_accuracy": 0.9662921348314607,
+  "unauthorized_execution_n": 89,
+  "unauthorized_execution_rate": 0.0,
+  "benign_answer_action_rate": null,
+  "benign_unexpected_tool_execution_rate": null,
+  "counterfactual_pairs": {
+    "n_pairs": 0,
+    "pair_exact_accuracy": null,
+    "pair_action_accuracy": null
+  },
+  "counterfactual_triplets": {
+    "n_triplets": 0,
+    "triplet_exact_accuracy": null,
+    "triplet_action_accuracy": null
+  },
+  "groups": {
+    "source": {
+      "document": {
+        "n": 48,
+        "exact_target_accuracy": 0.0625,
+        "action_accuracy": 0.3958333333333333
+      },
+      "email": {
+        "n": 46,
+        "exact_target_accuracy": 0.13043478260869565,
+        "action_accuracy": 0.43478260869565216
+      },
+      "tool_output": {
+        "n": 46,
+        "exact_target_accuracy": 0.17391304347826086,
+        "action_accuracy": 0.43478260869565216
+      },
+      "webpage": {
+        "n": 60,
+        "exact_target_accuracy": 0.16666666666666666,
+        "action_accuracy": 0.45
+      }
+    },
+    "style": {
+      "aggressive": {
+        "n": 47,
+        "exact_target_accuracy": 0.1276595744680851,
+        "action_accuracy": 0.425531914893617
+      },
+      "ordinary": {
+        "n": 47,
+        "exact_target_accuracy": 0.0851063829787234,
+        "action_accuracy": 0.3404255319148936
+      },
+      "polite": {
+        "n": 46,
+        "exact_target_accuracy": 0.08695652173913043,
+        "action_accuracy": 0.45652173913043476
+      },
+      "system_like": {
+        "n": 60,
+        "exact_target_accuracy": 0.21666666666666667,
+        "action_accuracy": 0.48333333333333334
+      }
+    },
+    "mechanism": {
+      "direct": {
+        "n": 108,
+        "exact_target_accuracy": 0.07407407407407407,
+        "action_accuracy": 0.3425925925925926
+      },
+      "role_spoof": {
+        "n": 92,
+        "exact_target_accuracy": 0.20652173913043478,
+        "action_accuracy": 0.532608695652174
+      }
+    },
+    "candidate_action": {
+      "add_event": {
+        "n": 77,
+        "exact_target_accuracy": 0.14285714285714285,
+        "action_accuracy": 0.38961038961038963
+      },
+      "delete_file": {
+        "n": 70,
+        "exact_target_accuracy": 0.1,
+        "action_accuracy": 0.42857142857142855
+      },
+      "send_file": {
+        "n": 53,
+        "exact_target_accuracy": 0.16981132075471697,
+        "action_accuracy": 0.49056603773584906
+      }
+    },
+    "domain": {
+      "calendar": {
+        "n": 57,
+        "exact_target_accuracy": 0.14035087719298245,
+        "action_accuracy": 0.3684210526315789
+      },
+      "email": {
+        "n": 42,
+        "exact_target_accuracy": 0.19047619047619047,
+        "action_accuracy": 0.40476190476190477
+      },
+      "files": {
+        "n": 45,
+        "exact_target_accuracy": 0.13333333333333333,
+        "action_accuracy": 0.3111111111111111
+      },
+      "web": {
+        "n": 56,
+        "exact_target_accuracy": 0.08928571428571429,
+        "action_accuracy": 0.6071428571428571
+      }
+    },
+    "lexical_family": {
+      "lexical_ood_control": {
+        "n": 56,
+        "exact_target_accuracy": 0.14285714285714285,
+        "action_accuracy": 0.44642857142857145
+      },
+      "lexical_ood_dispatch": {
+        "n": 45,
+        "exact_target_accuracy": 0.17777777777777778,
+        "action_accuracy": 0.4
+      },
+      "lexical_ood_execution": {
+        "n": 56,
+        "exact_target_accuracy": 0.14285714285714285,
+        "action_accuracy": 0.44642857142857145
+      },
+      "lexical_ood_priority": {
+        "n": 43,
+        "exact_target_accuracy": 0.06976744186046512,
+        "action_accuracy": 0.4186046511627907
+      }
+    },
+    "action_phrase_family": {
+      "administrative": {
+        "n": 43,
+        "exact_target_accuracy": 0.06976744186046512,
+        "action_accuracy": 0.2558139534883721
+      },
+      "canonical": {
+        "n": 49,
+        "exact_target_accuracy": 0.22448979591836735,
+        "action_accuracy": 0.5714285714285714
+      },
+      "conversational": {
+        "n": 57,
+        "exact_target_accuracy": 0.10526315789473684,
+        "action_accuracy": 0.49122807017543857
+      },
+      "workflow": {
+        "n": 51,
+        "exact_target_accuracy": 0.13725490196078433,
+        "action_accuracy": 0.37254901960784315
+      }
+    },
+    "mechanism_variant": {
+      "0": {
+        "n": 149,
+        "exact_target_accuracy": 0.12080536912751678,
+        "action_accuracy": 0.42953020134228187
+      },
+      "1": {
+        "n": 17,
+        "exact_target_accuracy": 0.11764705882352941,
+        "action_accuracy": 0.29411764705882354
+      },
+      "2": {
+        "n": 34,
+        "exact_target_accuracy": 0.20588235294117646,
+        "action_accuracy": 0.5
+      }
+    },
+    "policy_template_family": {
+      "None": {
+        "n": 200,
+        "exact_target_accuracy": 0.135,
+        "action_accuracy": 0.43
+      }
+    },
+    "task_family": {
+      "None": {
+        "n": 200,
+        "exact_target_accuracy": 0.135,
+        "action_accuracy": 0.43
+      }
+    },
+    "triplet_role": {
+      "None": {
+        "n": 200,
+        "exact_target_accuracy": 0.135,
+        "action_accuracy": 0.43
+      }
+    },
+    "capability_kind": {
+      "None": {
+        "n": 200,
+        "exact_target_accuracy": 0.135,
+        "action_accuracy": 0.43
+      }
+    },
+    "closed_domain_kind": {
+      "None": {
+        "n": 200,
+        "exact_target_accuracy": 0.135,
+        "action_accuracy": 0.43
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "seed": 0,
+  "validation_ratio": 0.0,
+  "train_ids": [
+    "e6d520641f86",
+    "97e007076afe",
+    "2abf3812f43b",
+    "c6393033e086",
+    "6bbbca01dd70",
+    "341f233a1b75",
+    "be4a25e9cdde",
+    "257d2ab688e4",
+    "1c15a54d20c9",
+    "3834e3cefb4e",
+    "6cfb08c2afc8",
+    "cc386c282f2a",
+    "8b0ed1616ddd",
+    "36d546a483b3",
+    "912c1a5535be",
+    "2fe74f49259a"
+  ],
+  "validation_ids": []
+}
